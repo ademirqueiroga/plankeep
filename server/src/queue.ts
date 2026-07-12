@@ -7,15 +7,19 @@ function queueFile(): string {
   return path.join(vaultRoot(), '.plankeep', 'queue.yaml')
 }
 
-export function getQueue(): string[] {
+/** Queue as stored, including entries whose file is momentarily absent (mid-rename). */
+function rawQueue(): string[] {
   try {
     const data = YAML.parse(fs.readFileSync(queueFile(), 'utf8'))
-    const queue: string[] = Array.isArray(data?.queue) ? data.queue : []
-    // drop entries whose file no longer exists
-    return queue.filter((rel) => fs.existsSync(path.join(vaultRoot(), rel)))
+    return Array.isArray(data?.queue) ? data.queue : []
   } catch {
     return []
   }
+}
+
+export function getQueue(): string[] {
+  // hide entries whose file no longer exists, but never persist that filtering
+  return rawQueue().filter((rel) => fs.existsSync(path.join(vaultRoot(), rel)))
 }
 
 export function setQueue(paths: string[]): void {
@@ -35,17 +39,24 @@ export function queueDocs(): DocSummary[] {
   return out
 }
 
-/** Rename a queue entry when a doc moves so queue order survives reorganization. */
+/** Rename a queue entry when a doc moves so queue order survives reorganization.
+    Must operate on rawQueue: the file was already moved, so the existence
+    filter would silently drop the entry before it could be rewritten. */
 export function renameInQueue(from: string, to: string): void {
-  setQueue(getQueue().map((p) => (p === from ? to : p)))
+  setQueue(rawQueue().map((p) => (p === from ? to : p)))
+}
+
+/** Rewrite queue entries under a renamed folder prefix (raw for the same reason). */
+export function renamePrefixInQueue(fromPrefix: string, toPrefix: string): void {
+  setQueue(rawQueue().map((p) => (p === fromPrefix || p.startsWith(fromPrefix + '/') ? toPrefix + p.slice(fromPrefix.length) : p)))
 }
 
 export function removeFromQueue(rel: string): void {
-  setQueue(getQueue().filter((p) => p !== rel))
+  setQueue(rawQueue().filter((p) => p !== rel))
 }
 
 export function addToQueue(rel: string, position?: number): void {
-  const queue = getQueue().filter((p) => p !== rel)
+  const queue = rawQueue().filter((p) => p !== rel)
   if (position === undefined || position >= queue.length) queue.push(rel)
   else queue.splice(Math.max(0, position), 0, rel)
   setQueue(queue)
