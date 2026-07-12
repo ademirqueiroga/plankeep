@@ -47,6 +47,7 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
   const [aiJob, setAiJob] = useState<{ id: string; action: string } | null>(null)
   const [aiMessage, setAiMessage] = useState<string | null>(null)
   const [lastRun, setLastRun] = useState<AiJob | null>(null)
+  const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [pickerOpen, setPickerOpen] = useState<'status' | 'type' | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -81,10 +82,16 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
   const toggleCheckbox = async (n: number) => {
     if (!doc) return
     const body = toggleNthCheckbox(doc.body, n)
+    const prevStatus = doc.meta.status
     setDoc({ ...doc, body })
-    await api.saveBody(path, body)
+    const summary = await api.saveBody(path, body)
     await load()
     await refresh()
+    if (summary.meta.status !== prevStatus) {
+      setStatusMessage(
+        summary.meta.status === 'done' ? 'All tasks complete — status set to done.' : 'Task unchecked — status set back to active.',
+      )
+    }
   }
 
   const setMeta = async (patch: Record<string, unknown>) => {
@@ -203,6 +210,12 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
               <button className="icon-btn" onClick={onOpenActivity}>View activity</button>
               {aiMessage && <button className="icon-btn" onClick={() => setAiMessage(null)}>✕</button>}
             </span>
+          </div>
+        )}
+        {statusMessage && (
+          <div className="banner">
+            <span className="banner-body">{statusMessage}</span>
+            <button className="icon-btn" onClick={() => setStatusMessage(null)}>✕</button>
           </div>
         )}
         <div className="doc-title-block">

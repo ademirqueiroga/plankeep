@@ -117,6 +117,15 @@ export function updateBody(rel: string, body: string): void {
   writeDoc(rel, body, doc.meta, extra)
 }
 
+/** Returns the new status if checkbox completion implies a change, else null. */
+export function autoStatusFor(rel: string): DocStatus | null {
+  const { body, meta } = readDoc(rel)
+  const { done, total } = checkboxProgress(body)
+  if (total > 0 && done === total && meta.status !== 'done' && meta.status !== 'archived') return 'done'
+  if (meta.status === 'done' && total > 0 && done < total) return 'active'
+  return null
+}
+
 export function updateMeta(rel: string, patch: Partial<Pick<DocMeta, 'type' | 'status' | 'tags'>>): DocMeta {
   const doc = readDoc(rel)
   const parsed = matter(doc.content)

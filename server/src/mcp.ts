@@ -47,7 +47,9 @@ export async function runMcp(): Promise<void> {
       } else {
         rel = vault.importContent(name, content, { folder, type, project: folder })
       }
-      await gitops.commitAll(`mcp save: ${rel}`)
+      const autoStatus = vault.autoStatusFor(rel)
+      if (autoStatus) vault.updateMeta(rel, { status: autoStatus })
+      await gitops.commitAll(`mcp save: ${rel}${autoStatus ? ` (auto-status: ${autoStatus})` : ''}`)
       return text({ path: rel, absPath: vault.safePath(rel) })
     },
   )

@@ -45,7 +45,9 @@ export function buildApp(): Hono {
     const { path: rel, content, body } = await c.req.json()
     if (typeof body === 'string') vault.updateBody(rel, body)
     else vault.saveRawDoc(rel, content)
-    await gitops.commitAll(`edit: ${rel}`)
+    const autoStatus = vault.autoStatusFor(rel)
+    if (autoStatus) vault.updateMeta(rel, { status: autoStatus })
+    await gitops.commitAll(`edit: ${rel}${autoStatus ? ` (auto-status: ${autoStatus})` : ''}`)
     return c.json(vault.summarize(rel))
   })
   api.post('/doc/meta', async (c) => {
