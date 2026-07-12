@@ -35,7 +35,9 @@ export function Sidebar(props: SidebarProps) {
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [treeDropOver, setTreeDropOver] = useState(false)
   const [dropTarget, setDropTarget] = useState<string | null>(null)
+  const [focusedPath, setFocusedPath] = useState<string | null>(null)
   const dragDepth = useRef(0)
+  const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
   // an aborted drag (Esc) fires no drop/dragleave on our elements — clear any stuck highlight
   useEffect(() => {
@@ -58,6 +60,19 @@ export function Sidebar(props: SidebarProps) {
         if (child.kind === 'folder') {
           if (isOpen(child.path)) walk(child)
         } else out.push(child.path)
+      }
+    }
+    if (tree) walk(tree)
+    return out
+  }, [tree, isOpen])
+
+  /** Visible rows (folders + docs) in display order — drives keyboard navigation. */
+  const visibleRows = useMemo(() => {
+    const out: Array<{ path: string; kind: 'folder' | 'doc' }> = []
+    const walk = (node: TreeNode) => {
+      for (const child of node.children ?? []) {
+        out.push({ path: child.path, kind: child.kind })
+        if (child.kind === 'folder' && isOpen(child.path)) walk(child)
       }
     }
     if (tree) walk(tree)
@@ -152,6 +167,32 @@ export function Sidebar(props: SidebarProps) {
     await refresh()
   }
 
+  const deleteSingleDoc = async (path: string) => {
+    const ok = await dialog.confirm({
+      title: 'Delete document?',
+      body: `${path} — history stays in vault git.`,
+      danger: true,
+      confirmLabel: 'Delete',
+    })
+    if (ok) {
+      await api.deleteDoc(path)
+      await refresh()
+    }
+  }
+
+  const deleteMultipleDocs = async (paths: string[]) => {
+    const ok = await dialog.confirm({
+      title: `Delete ${paths.length} documents?`,
+      body: 'History stays in vault git.',
+      danger: true,
+      confirmLabel: 'Delete',
+    })
+    if (!ok) return
+    for (const p of paths) await api.deleteDoc(p)
+    setSelected(new Set())
+    await refresh()
+  }
+
   const docMenu = (path: string): MenuItem[] => {
     const multi = selected.has(path) && selected.size > 1
     if (multi) {
@@ -164,18 +205,7 @@ export function Sidebar(props: SidebarProps) {
           if (folder !== null) await moveInternal(paths, folder.trim().replace(/^\/+|\/+$/g, ''))
         } },
         { separator: true },
-        { label: `Delete ${paths.length} documents…`, danger: true, onClick: async () => {
-          const ok = await dialog.confirm({
-            title: `Delete ${paths.length} documents?`,
-            body: 'History stays in vault git.',
-            danger: true,
-            confirmLabel: 'Delete',
-          })
-          if (!ok) return
-          for (const p of paths) await api.deleteDoc(p)
-          setSelected(new Set())
-          await refresh()
-        } },
+        { label: `Delete ${paths.length} documents…`, danger: true, onClick: () => deleteMultipleDocs(paths) },
       ]
     }
     return [
@@ -190,18 +220,7 @@ export function Sidebar(props: SidebarProps) {
       { label: 'Copy absolute path', onClick: () => navigator.clipboard.writeText(absOf(path)) },
       { label: 'Reveal in Finder', onClick: () => api.reveal({ path }) },
       { separator: true },
-      { label: 'Delete…', danger: true, onClick: async () => {
-        const ok = await dialog.confirm({
-          title: 'Delete document?',
-          body: `${path} — history stays in vault git.`,
-          danger: true,
-          confirmLabel: 'Delete',
-        })
-        if (ok) {
-          await api.deleteDoc(path)
-          await refresh()
-        }
-      } },
+      { label: 'Delete…', danger: true, onClick: () => deleteSingleDoc(path) },
     ]
   }
 
@@ -250,14 +269,78 @@ export function Sidebar(props: SidebarProps) {
           ? { cls: 'pending', label: `${git.dirty + git.ahead + git.behind} pending` }
           : { cls: 'ok', label: 'Synced' }
 
+  // ----- tree keyboard navigation -----
+  const focusRow = (path: string | null) => {
+    setFocusedPath(path)
+    if (path) rowRefs.current.get(path)?.scrollIntoView({ block: 'nearest' })
+  }
+
+  const onTreeKeyDown = (e: React.KeyboardEvent) => {
+    if (visibleRows.length === 0) return
+    const idx = focusedPath ? visibleRows.findIndex((r) => r.path === focusedPath) : -1
+    const current = idx !== -1 ? visibleRows[idx] : null
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      focusRow(visibleRows[idx === -1 ? 0 : Math.min(idx + 1, visibleRows.length - 1)].path)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      focusRow(visibleRows[idx === -1 ? 0 : Math.max(idx - 1, 0)].path)
+    } else if (e.key === 'ArrowRight') {
+      if (!current || current.kind !== 'folder') return
+      e.preventDefault()
+      if (!isOpen(current.path)) {
+        setOpenFolders({ ...openFolders, [current.path]: true })
+      } else {
+        const child = visibleRows[idx + 1]
+        if (child && child.path.startsWith(current.path + '/')) focusRow(child.path)
+      }
+    } else if (e.key === 'ArrowLeft') {
+      if (!current) return
+      e.preventDefault()
+      if (current.kind === 'folder' && isOpen(current.path)) {
+        setOpenFolders({ ...openFolders, [current.path]: false })
+      } else {
+        const parent = current.path.includes('/') ? current.path.slice(0, current.path.lastIndexOf('/')) : null
+        if (parent) focusRow(parent)
+      }
+    } else if (e.key === 'Enter') {
+      if (!current) return
+      e.preventDefault()
+      if (current.kind === 'doc') {
+        setSelected(new Set([current.path]))
+        setLastClicked(current.path)
+        openDoc(current.path)
+      } else {
+        setOpenFolders({ ...openFolders, [current.path]: !isOpen(current.path) })
+      }
+    } else if (e.key === ' ') {
+      if (!current || current.kind !== 'doc') return
+      e.preventDefault()
+      const next = new Set(selected)
+      next.has(current.path) ? next.delete(current.path) : next.add(current.path)
+      setSelected(next)
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (!current) return
+      e.preventDefault()
+      if (current.kind === 'doc') {
+        if (selected.has(current.path) && selected.size > 1) void deleteMultipleDocs([...selected])
+        else void deleteSingleDoc(current.path)
+      } else {
+        void confirmDeleteFolder(current.path)
+      }
+    }
+  }
+
   const renderChildren = (node: TreeNode, depth: number): React.ReactNode =>
     node.children?.map((child) =>
       child.kind === 'folder' ? (
         <div key={child.path}>
           <div
-            className={`tree-row folder-row${dropTarget === child.path ? ' drop-target' : ''}`}
+            ref={(el) => { if (el) rowRefs.current.set(child.path, el); else rowRefs.current.delete(child.path) }}
+            className={`tree-row folder-row${dropTarget === child.path ? ' drop-target' : ''}${focusedPath === child.path ? ' focused' : ''}`}
             style={{ paddingLeft: 8 + depth * 14 }}
-            onClick={() => setOpenFolders({ ...openFolders, [child.path]: !isOpen(child.path) })}
+            onClick={() => { setFocusedPath(child.path); setOpenFolders({ ...openFolders, [child.path]: !isOpen(child.path) }) }}
             onContextMenu={(e) => showMenu(e, folderMenu(child.path))}
             onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDropTarget(child.path) }}
             onDrop={(e) => handleDrop(e, child.path)}
@@ -271,11 +354,12 @@ export function Sidebar(props: SidebarProps) {
       ) : (
         <div
           key={child.path}
-          className={`tree-row doc-row${view.kind === 'doc' && view.path === child.path ? ' active' : ''}${selected.has(child.path) ? ' selected' : ''} status-${child.doc!.meta.status}`}
+          ref={(el) => { if (el) rowRefs.current.set(child.path, el); else rowRefs.current.delete(child.path) }}
+          className={`tree-row doc-row${view.kind === 'doc' && view.path === child.path ? ' active' : ''}${selected.has(child.path) ? ' selected' : ''}${focusedPath === child.path ? ' focused' : ''} status-${child.doc!.meta.status}`}
           style={{ paddingLeft: 8 + depth * 14 + 14 }}
           draggable
           onDragStart={(e) => startDrag(child.path, e)}
-          onClick={(e) => handleDocClick(child.path, e)}
+          onClick={(e) => { setFocusedPath(child.path); handleDocClick(child.path, e) }}
           onContextMenu={(e) => {
             if (!selected.has(child.path)) setSelected(new Set([child.path]))
             showMenu(e, docMenu(child.path))
@@ -356,7 +440,12 @@ export function Sidebar(props: SidebarProps) {
             </button>
           </Tooltip>
         </div>
-        <div className="tree" onClick={(e) => { if (e.target === e.currentTarget) setSelected(new Set()) }}>
+        <div
+          className="tree"
+          tabIndex={0}
+          onKeyDown={onTreeKeyDown}
+          onClick={(e) => { if (e.target === e.currentTarget) setSelected(new Set()) }}
+        >
           {tree?.children?.length ? (
             renderChildren(tree, 0)
           ) : (
