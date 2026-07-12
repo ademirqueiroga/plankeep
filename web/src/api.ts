@@ -63,7 +63,13 @@ export interface AiJob {
   action: string
   path: string
   status: 'running' | 'done' | 'error'
+  startedAt: string
+  finishedAt?: string
   error?: string
+  durationMs?: number
+  outputChars?: number
+  stderrTail?: string
+  cwd: string
 }
 
 export interface SearchHit {
@@ -127,4 +133,5 @@ export const api = {
   createRemote: (name: string) => post<{ url: string }>('/api/git/create-remote', { name }),
   aiRun: (path: string, action: string) => post<AiJob>('/api/ai/run', { path, action }),
   aiJob: (id: string) => request<AiJob>(`/api/ai/jobs/${id}`),
+  aiJobs: () => request<AiJob[]>('/api/ai/jobs'),
 }

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { api, type Config, type FullDoc } from '../api'
+import { api, type AiJob, type Config, type FullDoc } from '../api'
 import { CopyBtn } from './CopyBtn'
 import { dialog } from './Dialog'
 import { Tooltip } from './Tooltip'
 import { PickerMenu } from './PickerMenu'
+import { ACTION_LABELS, ago } from './ActivityView'
 import type { DocApi } from '../shortcuts'
 
 const TYPES = ['plan', 'findings', 'exploration', 'research', 'note'] as const
@@ -34,15 +35,17 @@ interface DocViewProps {
   onDeleted: () => void
   onMoved: (newPath: string) => void
   onDocApi?: (api: DocApi | null) => void
+  onOpenActivity: () => void
 }
 
-export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi }: DocViewProps) {
+export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, onOpenActivity }: DocViewProps) {
   const [doc, setDoc] = useState<FullDoc | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [aiJob, setAiJob] = useState<{ id: string; action: string } | null>(null)
   const [aiMessage, setAiMessage] = useState<string | null>(null)
+  const [lastRun, setLastRun] = useState<AiJob | null>(null)
   const [pickerOpen, setPickerOpen] = useState<'status' | 'type' | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -60,12 +63,19 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi }:
     }
   }, [path])
 
+  const loadLastRun = useCallback(async () => {
+    const jobs = await api.aiJobs()
+    const mine = jobs.filter((j) => j.path === path).sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+    setLastRun(mine[0] ?? null)
+  }, [path])
+
   useEffect(() => {
     load()
+    loadLastRun()
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
     }
-  }, [load])
+  }, [load, loadLastRun])
 
   const toggleCheckbox = async (n: number) => {
     if (!doc) return
@@ -94,6 +104,7 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi }:
         setAiMessage(j.status === 'done' ? `AI ${action} finished — document updated and committed.` : `AI ${action} failed: ${j.error}`)
         await load()
         await refresh()
+        await loadLastRun()
       }
     }, 3000)
   }
@@ -184,8 +195,13 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi }:
       <div className="doc-main">
         {(aiJob || aiMessage) && (
           <div className={`banner${aiMessage?.includes('failed') ? ' error' : ''}`}>
-            {aiJob ? `Running AI ${aiJob.action} via claude -p — this can take a few minutes…` : aiMessage}
-            {aiMessage && <button className="icon-btn" onClick={() => setAiMessage(null)}>✕</button>}
+            <span className="banner-body">
+              {aiJob ? `Running AI ${aiJob.action} via claude -p — this can take a few minutes…` : aiMessage}
+            </span>
+            <span className="banner-actions">
+              <button className="icon-btn" onClick={onOpenActivity}>View activity</button>
+              {aiMessage && <button className="icon-btn" onClick={() => setAiMessage(null)}>✕</button>}
+            </span>
           </div>
         )}
         <div className="doc-title-block">
@@ -301,6 +317,11 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi }:
               </button>
             </Tooltip>
           ))}
+          {lastRun && (
+            <button className="panel-hint-link" onClick={onOpenActivity}>
+              Last run: {ACTION_LABELS[lastRun.action] ?? lastRun.action} — {lastRun.status} {ago(lastRun.startedAt)}
+            </button>
+          )}
         </PanelGroup>
 
         <PanelGroup title="Paths">

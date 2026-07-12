@@ -815,3 +815,72 @@ input:focus, select:focus, textarea:focus {
 .git-log-row { display: flex; gap: 12px; padding: 4px 0; border-bottom: 1px solid var(--line); }
 .git-log-row code { color: var(--brand); font-family: var(--mono); font-size: 11px; }
 .git-log-date { color: var(--faint); white-space: nowrap; }
+
+/* ============ activity view ============ */
+.activity-list { list-style: none; margin: 0; padding: 0; }
+.activity-row { border-bottom: 1px solid var(--line); padding: 10px 2px; }
+.activity-main { display: flex; align-items: center; gap: 12px; }
+.activity-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  width: 64px;
+  flex-shrink: 0;
+  color: var(--mut);
+}
+.activity-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex-shrink: 0; }
+.activity-status.running .activity-dot { background: var(--brand); animation: activity-pulse 1.2s infinite; }
+.activity-status.done .activity-dot { background: var(--ok); }
+.activity-status.error { color: var(--danger-fg); cursor: pointer; }
+.activity-status.error .activity-dot { background: var(--danger-fg); }
+.activity-action { flex: 1; min-width: 0; }
+.activity-path {
+  background: none;
+  border: none;
+  color: var(--mut);
+  font-size: 12.5px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+}
+.activity-path:hover { color: var(--brand); background: none; }
+.activity-time, .activity-duration { font-size: 11.5px; color: var(--faint); flex-shrink: 0; }
+.activity-error-detail {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--danger-bg);
+  border-radius: 6px;
+  color: var(--danger-fg);
+  font-size: 12.5px;
+}
+.activity-error-detail pre {
+  overflow-x: auto;
+  font-size: 11px;
+  color: var(--mut);
+  background: var(--surf);
+  padding: 8px;
+  border-radius: 6px;
+  margin-top: 6px;
+}
+@keyframes activity-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.badge.running { background: var(--brand); animation: activity-pulse 1.2s infinite; }
+.panel-hint-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--faint);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.panel-hint-link:hover { color: var(--brand); background: none; }
+.banner-body { flex: 1; min-width: 0; }
+.banner-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }

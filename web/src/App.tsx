@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, type Config, type DocSummary, type GitState, type TreeNode } from './api'
+import { api, type AiJob, type Config, type DocSummary, type GitState, type TreeNode } from './api'
 import { Sidebar } from './components/Sidebar'
 import { DocView } from './components/DocView'
 import { QueueView } from './components/QueueView'
 import { InboxView } from './components/InboxView'
 import { SettingsView } from './components/SettingsView'
 import { SearchView } from './components/SearchView'
+import { ActivityView } from './components/ActivityView'
 import { DialogHost, dialog } from './components/Dialog'
 import { Tooltip } from './components/Tooltip'
 import { Palette } from './components/Palette'
@@ -17,12 +18,14 @@ export type View =
   | { kind: 'inbox' }
   | { kind: 'search' }
   | { kind: 'settings' }
+  | { kind: 'activity' }
 
 const VIEW_TITLES: Record<string, string> = {
   queue: 'Up Next',
   inbox: 'Inbox',
   search: 'Search',
   settings: 'Settings',
+  activity: 'Activity',
 }
 
 export default function App() {
@@ -30,6 +33,7 @@ export default function App() {
   const [tree, setTree] = useState<TreeNode | null>(null)
   const [queue, setQueue] = useState<DocSummary[]>([])
   const [inboxCount, setInboxCount] = useState(0)
+  const [aiJobs, setAiJobs] = useState<AiJob[]>([])
   const [git, setGit] = useState<GitState | null>(null)
   const [config, setConfig] = useState<Config | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem('pk-sidebar-width')) || 280)
@@ -38,12 +42,13 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false)
 
   const refresh = useCallback(async () => {
-    const [t, q, inbox, g, meta] = await Promise.all([api.tree(), api.queue(), api.inbox(), api.gitStatus(), api.meta()])
+    const [t, q, inbox, g, meta, jobs] = await Promise.all([api.tree(), api.queue(), api.inbox(), api.gitStatus(), api.meta(), api.aiJobs()])
     setTree(t)
     setQueue(q)
     setInboxCount(inbox.length)
     setGit(g)
     setConfig(meta.config)
+    setAiJobs(jobs)
   }, [])
 
   useEffect(() => {
@@ -109,6 +114,8 @@ export default function App() {
     }
   }, [])
 
+  const aiRunningCount = aiJobs.filter((j) => j.status === 'running').length
+
   const crumb =
     view.kind === 'doc'
       ? view.path.split('/')
@@ -121,6 +128,7 @@ export default function App() {
         queue={queue}
         view={view}
         inboxCount={inboxCount}
+        aiRunningCount={aiRunningCount}
         git={git}
         config={config}
         width={sidebarWidth}
@@ -161,12 +169,14 @@ export default function App() {
               onDeleted={() => setView({ kind: 'queue' })}
               onMoved={openDoc}
               onDocApi={(api) => { docApiRef.current = api }}
+              onOpenActivity={() => setView({ kind: 'activity' })}
             />
           )}
           {view.kind === 'queue' && <QueueView openDoc={openDoc} refresh={refresh} />}
           {view.kind === 'inbox' && <InboxView config={config} openDoc={openDoc} refresh={refresh} />}
           {view.kind === 'search' && <SearchView openDoc={openDoc} />}
           {view.kind === 'settings' && <SettingsView refresh={refresh} />}
+          {view.kind === 'activity' && <ActivityView openDoc={openDoc} />}
         </main>
       </div>
       <Palette

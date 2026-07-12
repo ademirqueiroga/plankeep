@@ -1,8 +1,10 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
+import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { readDoc, saveRawDoc, safePath } from './vault.js'
 import { commitAll } from './gitops.js'
+import { configDir } from './config.js'
 
 export type AiAction = 'improve' | 'checkboxify' | 'refresh'
 
@@ -14,9 +16,43 @@ export interface AiJob {
   startedAt: string
   finishedAt?: string
   error?: string
+  durationMs?: number
+  outputChars?: number
+  stderrTail?: string
+  cwd: string
 }
 
+const STDERR_TAIL_CHARS = 2000
+const JOBS_CAP = 200
+
 const jobs = new Map<string, AiJob>()
+
+function jobsFile(): string {
+  return path.join(configDir(), 'ai-jobs.json')
+}
+
+function persistJobs(): void {
+  const all = [...jobs.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, JOBS_CAP)
+  fs.writeFileSync(jobsFile(), JSON.stringify(all, null, 2) + '\n')
+}
+
+function loadJobs(): void {
+  try {
+    const raw: AiJob[] = JSON.parse(fs.readFileSync(jobsFile(), 'utf8'))
+    for (const job of raw) {
+      if (job.status === 'running') {
+        job.status = 'error'
+        job.error = 'server restarted mid-job'
+        job.finishedAt = job.finishedAt ?? new Date().toISOString()
+      }
+      jobs.set(job.id, job)
+    }
+  } catch {
+    // no persisted jobs yet
+  }
+}
+
+loadJobs()
 
 const COMMON_RULES = `
 Rules:
@@ -54,18 +90,23 @@ export function startJob(action: AiAction, rel: string): AiJob {
     path: rel,
     status: 'running',
     startedAt: new Date().toISOString(),
+    cwd,
   }
   jobs.set(job.id, job)
+  persistJobs()
 
   const args = ['-p', promptFor(action, content, project), '--output-format', 'text']
   if (action === 'refresh') args.push('--allowedTools', 'Read,Grep,Glob,Bash(git log:*),Bash(git diff:*)')
 
-  execFile('claude', args, { cwd, maxBuffer: 32 * 1024 * 1024, timeout: 15 * 60_000 }, async (err, stdout) => {
+  const startedMs = Date.now()
+  execFile('claude', args, { cwd, maxBuffer: 32 * 1024 * 1024, timeout: 15 * 60_000 }, async (err, stdout, stderr) => {
+    job.stderrTail = stderr?.slice(-STDERR_TAIL_CHARS)
     if (err) {
       job.status = 'error'
       job.error = err.message.split('\n')[0]
     } else {
       const output = stdout.trim()
+      job.outputChars = output.length
       // sanity guard: refuse suspiciously short/empty output instead of clobbering the doc
       if (output.length < 40 || !output.startsWith('---')) {
         job.status = 'error'
@@ -77,6 +118,8 @@ export function startJob(action: AiAction, rel: string): AiJob {
       }
     }
     job.finishedAt = new Date().toISOString()
+    job.durationMs = Date.now() - startedMs
+    persistJobs()
   })
   return job
 }
@@ -86,5 +129,5 @@ export function getJob(id: string): AiJob | undefined {
 }
 
 export function listJobs(): AiJob[] {
-  return [...jobs.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, 20)
+  return [...jobs.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, 50)
 }

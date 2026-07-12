@@ -18,6 +18,7 @@ interface SidebarProps {
   queue: DocSummary[]
   view: View
   inboxCount: number
+  aiRunningCount: number
   git: GitState | null
   config: Config | null
   width: number
@@ -27,7 +28,7 @@ interface SidebarProps {
 }
 
 export function Sidebar(props: SidebarProps) {
-  const { tree, queue, view, inboxCount, git, config, width, setView, openDoc, refresh } = props
+  const { tree, queue, view, inboxCount, aiRunningCount, git, config, width, setView, openDoc, refresh } = props
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [lastClicked, setLastClicked] = useState<string | null>(null)
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({})
@@ -300,6 +301,10 @@ export function Sidebar(props: SidebarProps) {
         <button className={`nav-item${view.kind === 'inbox' ? ' active' : ''}`} onClick={() => setView({ kind: 'inbox' })}>
           <span className="nav-glyph">▣</span> Inbox
           {inboxCount > 0 && <span className="badge">{inboxCount}</span>}
+        </button>
+        <button className={`nav-item${view.kind === 'activity' ? ' active' : ''}`} onClick={() => setView({ kind: 'activity' })}>
+          <span className="nav-glyph">◷</span> Activity
+          {aiRunningCount > 0 && <span className="badge running">{aiRunningCount}</span>}
         </button>
       </nav>
 
