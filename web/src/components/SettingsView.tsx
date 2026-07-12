@@ -139,6 +139,21 @@ export function SettingsView({ refresh }: { refresh: () => Promise<void> }) {
       </section>
 
       <section>
+        <h2>Excluded paths</h2>
+        <p className="hint">
+          Markdown files under these paths never enter the inbox. Supports * (one path segment) and ** (any depth), e.g. ~/.claude/plans/*/*/progress
+        </p>
+        <textarea
+          className="roots"
+          defaultValue={config.excludePaths.join('\n')}
+          onBlur={(e) => {
+            const paths = e.target.value.split('\n').map((s) => s.trim()).filter(Boolean)
+            if (paths.join() !== config.excludePaths.join()) save({ excludePaths: paths })
+          }}
+        />
+      </section>
+
+      <section>
         <h2>Vault history (latest commits)</h2>
         <div className="git-log">
           {log.map((l) => (

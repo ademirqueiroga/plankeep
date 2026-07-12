@@ -108,6 +108,7 @@ export interface Config {
   importMode: 'copy' | 'move'
   git: { remote: string; autoCommit: boolean; autoPush: boolean }
   scanRoots: string[]
+  excludePaths: string[]
   port: number
 }
 

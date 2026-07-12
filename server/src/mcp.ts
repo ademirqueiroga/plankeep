@@ -5,6 +5,7 @@ import * as vault from './vault.js'
 import * as gitops from './gitops.js'
 import * as queue from './queue.js'
 import * as inbox from './inbox.js'
+import * as scanner from './scanner.js'
 
 const text = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] })
 
@@ -117,7 +118,7 @@ export async function runMcp(): Promise<void> {
     'list_inbox',
     'List pending inbox candidates: markdown files detected in repos/Claude sessions that are not yet imported into the vault.',
     {},
-    async () => text(inbox.pending()),
+    async () => text(inbox.pending().filter((i) => !scanner.isExcluded(i.path))),
   )
 
   const transport = new StdioServerTransport()

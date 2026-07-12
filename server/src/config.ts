@@ -11,6 +11,7 @@ export interface PlanKeepConfig {
     autoPush: boolean
   }
   scanRoots: string[]
+  excludePaths: string[]
   port: number
 }
 
@@ -22,6 +23,7 @@ const DEFAULTS: PlanKeepConfig = {
   importMode: 'copy',
   git: { remote: '', autoCommit: true, autoPush: false },
   scanRoots: [path.join(os.homedir(), '.claude', 'plans'), path.join(os.homedir(), 'workspace')],
+  excludePaths: [path.join(os.homedir(), '.claude', 'plans', '*', '*', 'progress')],
   port: 5175,
 }
 

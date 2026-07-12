@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, type Config, type InboxItem } from '../api'
 import { CopyBtn } from './CopyBtn'
+import { dialog } from './Dialog'
 
 type SortMode = 'mtime' | 'added' | 'path'
 const SORT_KEY = 'pk-inbox-sort'
@@ -57,6 +58,20 @@ export function InboxView({ config, openDoc, refresh }: InboxViewProps) {
     await refresh()
   }
 
+  const excludeFolder = async (item: InboxItem) => {
+    const dir = item.path.slice(0, item.path.lastIndexOf('/')) || item.path
+    const entry = await dialog.prompt({
+      title: 'Exclude folder',
+      body: 'Files under this path will no longer appear in the inbox. Edit to widen (use * / **).',
+      label: 'Path or glob',
+      initial: dir,
+    })
+    if (!entry?.trim()) return
+    await api.saveSettings({ excludePaths: [...(config?.excludePaths ?? []), entry.trim()] })
+    await load()
+    await refresh()
+  }
+
   return (
     <div className="view">
       <div className="view-header">
@@ -78,17 +93,33 @@ export function InboxView({ config, openDoc, refresh }: InboxViewProps) {
       {scanMsg && <div className="banner">{scanMsg}</div>}
       {sorted.length === 0 && <div className="empty-state">Nothing pending. New plan files written by Claude will show up here automatically.</div>}
       {sorted.map((item) => (
-        <InboxRow key={item.path} item={item} defaultMode={config?.importMode ?? 'copy'} onDone={async (imported) => {
-          await load()
-          await refresh()
-          if (imported) openDoc(imported)
-        }} />
+        <InboxRow
+          key={item.path}
+          item={item}
+          defaultMode={config?.importMode ?? 'copy'}
+          onExclude={() => excludeFolder(item)}
+          onDone={async (imported) => {
+            await load()
+            await refresh()
+            if (imported) openDoc(imported)
+          }}
+        />
       ))}
     </div>
   )
 }
 
-function InboxRow({ item, defaultMode, onDone }: { item: InboxItem; defaultMode: string; onDone: (imported?: string) => Promise<void> }) {
+function InboxRow({
+  item,
+  defaultMode,
+  onExclude,
+  onDone,
+}: {
+  item: InboxItem
+  defaultMode: string
+  onExclude: () => void
+  onDone: (imported?: string) => Promise<void>
+}) {
   const [folder, setFolder] = useState(item.project)
   const [mode, setMode] = useState(defaultMode)
   const [busy, setBusy] = useState(false)
@@ -126,6 +157,7 @@ function InboxRow({ item, defaultMode, onDone }: { item: InboxItem; defaultMode:
         </select>
         <button className="primary" disabled={busy} onClick={doImport}>Import</button>
         <button disabled={busy} onClick={() => api.dismiss(item.path).then(() => onDone())}>Dismiss</button>
+        <button disabled={busy} onClick={onExclude}>Exclude folder…</button>
       </div>
     </div>
   )

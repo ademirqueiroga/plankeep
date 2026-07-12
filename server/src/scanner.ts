@@ -20,6 +20,22 @@ const EXCLUDED_NAMES = new Set([
 /** Claude Code's own per-project memory files — never treat these as plan candidates. */
 export const CLAUDE_MEMORY_RE = /\/\.claude\/projects\/[^/]+\/memory\//
 
+/** Build a RegExp from a user exclude-path entry: `*` matches within one path segment, `**` matches across segments. */
+function excludeEntryToRe(entry: string): RegExp {
+  const expanded = expandTilde(entry)
+  const escaped = expanded.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+  // split on ** first so it doesn't get caught by the lone-* replacement below
+  let pattern = escaped.split('**').map((part) => part.replace(/\*/g, '[^/]*')).join('.*')
+  if (!expanded.includes('*')) pattern += '(/|$)'
+  return new RegExp(`^${pattern}`)
+}
+
+/** User-configured paths/globs whose markdown files must never enter the inbox. */
+export function isExcluded(abs: string): boolean {
+  const config = loadConfig()
+  return config.excludePaths.some((entry) => excludeEntryToRe(entry).test(abs))
+}
+
 export function isCandidateFile(abs: string): boolean {
   if (!abs.endsWith('.md')) return false
   if (EXCLUDED_NAMES.has(path.basename(abs).toLowerCase())) return false
@@ -27,6 +43,7 @@ export function isCandidateFile(abs: string): boolean {
   if (abs === vault || abs.startsWith(vault + path.sep)) return false
   if (/\/(node_modules|\.git|\.idea|build|dist)\//.test(abs)) return false
   if (CLAUDE_MEMORY_RE.test(abs)) return false
+  if (isExcluded(abs)) return false
   return true
 }
 
