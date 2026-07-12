@@ -540,6 +540,7 @@ input:focus, select:focus, textarea:focus {
 .topbar-btn { padding: 6px; }
 
 .main { flex: 1; overflow-y: auto; }
+.main.main-doc { overflow: hidden; display: flex; min-height: 0; }
 
 .view { max-width: 1000px; margin: 0 auto; padding: 28px 40px 100px; }
 .view-header { display: flex; justify-content: space-between; align-items: baseline; }
@@ -577,8 +578,26 @@ input:focus, select:focus, textarea:focus {
 .banner.error { border-left-color: var(--danger-fg); background: var(--danger-bg); color: var(--danger-fg); }
 
 /* ============ doc view ============ */
-.doc-layout { display: flex; min-height: 100%; }
-.doc-main { flex: 1; min-width: 0; padding: 28px 36px 120px; max-width: 1100px; margin: 0 auto; }
+.doc-layout { display: flex; flex: 1; min-width: 0; position: relative; }
+.doc-main {
+  flex: 1;
+  min-width: 0;
+  padding: 28px 36px 120px;
+  max-width: 1100px;
+  margin: 0 auto;
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.doc-main::-webkit-scrollbar { width: 10px; }
+.doc-main::-webkit-scrollbar-track { background: transparent; }
+.doc-main::-webkit-scrollbar-thumb {
+  background: rgba(11, 11, 11, 0.18);
+  border-radius: 5px;
+  border: 2px solid var(--bg);
+}
+.doc-main::-webkit-scrollbar-thumb:hover { background: rgba(11, 11, 11, 0.32); }
+.doc-main { scrollbar-width: thin; scrollbar-color: rgba(11, 11, 11, 0.25) transparent; }
 
 .doc-title-block { border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 22px; }
 .doc-title-serif {
@@ -610,6 +629,7 @@ input:focus, select:focus, textarea:focus {
   border-left: 1px solid var(--line);
   background: var(--bg);
   padding: 18px 16px 60px;
+  height: 100%;
   overflow-y: auto;
 }
 .panel-group { margin-bottom: 22px; }

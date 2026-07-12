@@ -165,7 +165,7 @@ export default function App() {
             </button>
           </Tooltip>
         </header>
-        <main className="main">
+        <main className={`main${view.kind === 'doc' ? ' main-doc' : ''}`}>
           {view.kind === 'doc' && (
             <DocView
               key={view.path}
