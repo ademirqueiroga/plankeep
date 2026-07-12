@@ -44,6 +44,7 @@ export async function runMcp(): Promise<void> {
       if (overwritePath) {
         vault.saveRawDoc(overwritePath, content)
         rel = overwritePath
+        if (type) vault.updateMeta(rel, { type })
       } else {
         rel = vault.importContent(name, content, { folder, type, project: folder })
       }

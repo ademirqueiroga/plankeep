@@ -101,12 +101,22 @@ export function writeDoc(rel: string, body: string, meta: DocMeta, extraFrontmat
   fs.writeFileSync(abs, matter.stringify(body.replace(/^\n+/, ''), data))
 }
 
-/** Save raw content (front-matter included) as sent by an editor, keeping meta consistent. */
+/**
+ * Save raw content (front-matter included) as sent by an editor or MCP, keeping meta consistent.
+ * When overwriting an existing doc, incoming `plankeep` front-matter fields win field-by-field but
+ * anything the incoming content doesn't specify (e.g. no front-matter at all) keeps the doc's
+ * existing id/type/status/tags/source/imported rather than resetting to defaults.
+ */
 export function saveRawDoc(rel: string, content: string): void {
   const parsed = matter(content)
-  const meta = normalizeMeta(parsed.data?.plankeep)
   const extra = { ...parsed.data }
   delete extra.plankeep
+
+  const abs = safePath(rel)
+  const meta = fs.existsSync(abs)
+    ? { ...readDoc(rel).meta, ...(parsed.data?.plankeep ?? {}) }
+    : normalizeMeta(parsed.data?.plankeep)
+
   writeDoc(rel, parsed.content, meta, extra)
 }
 
