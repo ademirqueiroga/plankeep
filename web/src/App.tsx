@@ -153,7 +153,15 @@ export default function App() {
         </header>
         <main className="main">
           {view.kind === 'doc' && (
-            <DocView key={view.path} path={view.path} config={config} refresh={refresh} onDeleted={() => setView({ kind: 'queue' })} onMoved={openDoc} />
+            <DocView
+              key={view.path}
+              path={view.path}
+              config={config}
+              refresh={refresh}
+              onDeleted={() => setView({ kind: 'queue' })}
+              onMoved={openDoc}
+              onDocApi={(api) => { docApiRef.current = api }}
+            />
           )}
           {view.kind === 'queue' && <QueueView openDoc={openDoc} refresh={refresh} />}
           {view.kind === 'inbox' && <InboxView config={config} openDoc={openDoc} refresh={refresh} />}

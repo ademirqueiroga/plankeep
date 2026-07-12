@@ -5,6 +5,8 @@ import { api, type Config, type FullDoc } from '../api'
 import { CopyBtn } from './CopyBtn'
 import { dialog } from './Dialog'
 import { Tooltip } from './Tooltip'
+import { PickerMenu } from './PickerMenu'
+import type { DocApi } from '../shortcuts'
 
 const TYPES = ['plan', 'findings', 'exploration', 'research', 'note'] as const
 const STATUSES = ['draft', 'active', 'done', 'archived'] as const
@@ -31,16 +33,22 @@ interface DocViewProps {
   refresh: () => Promise<void>
   onDeleted: () => void
   onMoved: (newPath: string) => void
+  onDocApi?: (api: DocApi | null) => void
 }
 
-export function DocView({ path, config, refresh, onDeleted, onMoved }: DocViewProps) {
+export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi }: DocViewProps) {
   const [doc, setDoc] = useState<FullDoc | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [aiJob, setAiJob] = useState<{ id: string; action: string } | null>(null)
   const [aiMessage, setAiMessage] = useState<string | null>(null)
+  const [pickerOpen, setPickerOpen] = useState<'status' | 'type' | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const statusBtnRef = useRef<HTMLButtonElement>(null)
+  const typeBtnRef = useRef<HTMLButtonElement>(null)
+  const tagsInputRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
     try {
@@ -113,6 +121,59 @@ export function DocView({ path, config, refresh, onDeleted, onMoved }: DocViewPr
     }
   }
 
+  const enterEdit = useCallback(() => {
+    if (!doc) return
+    setDraft(doc.content)
+    setEditing(true)
+  }, [doc])
+
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      textareaRef.current.focus()
+      textareaRef.current.setSelectionRange(0, 0)
+    }
+  }, [editing])
+
+  const saveEdit = async () => {
+    await api.saveDoc(path, draft)
+    setEditing(false)
+    await load()
+    await refresh()
+  }
+
+  const exitEditRequest = useCallback(async () => {
+    if (!doc) return
+    if (draft === doc.content) {
+      setEditing(false)
+      return
+    }
+    const choice = await dialog.saveDiscard({ title: 'Unsaved changes', body: `Save your edits to ${doc.title}?` })
+    if (choice === 'save') await saveEdit()
+    else if (choice === 'discard') setEditing(false)
+    // 'cancel' — stay in the editor
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc, draft, path])
+
+  useEffect(() => {
+    if (!onDocApi) return
+    onDocApi({
+      enterEdit,
+      exitEditRequest,
+      openStatusPicker: () => setPickerOpen('status'),
+      openTypePicker: () => setPickerOpen('type'),
+      focusLabels: () => tagsInputRef.current?.focus(),
+      copyVaultPath: () => navigator.clipboard.writeText(path),
+      copyAbsPath: () => doc && navigator.clipboard.writeText(doc.absPath),
+      copyMention: () => doc && navigator.clipboard.writeText(`@${doc.absPath}`),
+      runAi: (action: string) => runAi(action),
+      del,
+      rename,
+      addToQueue: () => api.queueAdd(path).then(refresh),
+    })
+    return () => onDocApi(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc, path, enterEdit, exitEditRequest])
+
   if (error) return <div className="empty-state">Could not open {path}: {error}</div>
   if (!doc) return <div className="empty-state">Loading…</div>
 
@@ -138,20 +199,21 @@ export function DocView({ path, config, refresh, onDeleted, onMoved }: DocViewPr
 
         {editing ? (
           <div className="editor">
-            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} spellCheck={false} />
+            <textarea
+              ref={textareaRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.preventDefault()
+                  exitEditRequest()
+                }
+              }}
+              spellCheck={false}
+            />
             <div className="editor-actions">
-              <button
-                className="primary"
-                onClick={async () => {
-                  await api.saveDoc(path, draft)
-                  setEditing(false)
-                  await load()
-                  await refresh()
-                }}
-              >
-                Save
-              </button>
-              <button onClick={() => setEditing(false)}>Cancel</button>
+              <button className="primary" onClick={saveEdit}>Save</button>
+              <button onClick={exitEditRequest}>Cancel</button>
             </div>
           </div>
         ) : (
@@ -177,19 +239,18 @@ export function DocView({ path, config, refresh, onDeleted, onMoved }: DocViewPr
         <PanelGroup title="Properties">
           <div className="prop-row">
             <label>Type</label>
-            <select value={doc.meta.type} onChange={(e) => setMeta({ type: e.target.value })}>
-              {TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
+            <button ref={typeBtnRef} className="prop-value-btn" onClick={() => setPickerOpen('type')}>{doc.meta.type}</button>
           </div>
           <div className="prop-row">
             <label>Status</label>
-            <select value={doc.meta.status} onChange={(e) => setMeta({ status: e.target.value })}>
-              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <button ref={statusBtnRef} className={`prop-value-btn status-pill s-${doc.meta.status}`} onClick={() => setPickerOpen('status')}>
+              {doc.meta.status}
+            </button>
           </div>
           <div className="prop-row">
             <label>Tags</label>
             <input
+              ref={tagsInputRef}
               defaultValue={doc.meta.tags.join(', ')}
               placeholder="comma, separated"
               onBlur={(e) => {
@@ -200,12 +261,31 @@ export function DocView({ path, config, refresh, onDeleted, onMoved }: DocViewPr
           </div>
         </PanelGroup>
 
+        {pickerOpen === 'type' && (
+          <PickerMenu
+            anchorRef={typeBtnRef}
+            options={TYPES.map((t) => ({ value: t, label: t }))}
+            current={doc.meta.type}
+            onSelect={(v) => setMeta({ type: v })}
+            onClose={() => setPickerOpen(null)}
+          />
+        )}
+        {pickerOpen === 'status' && (
+          <PickerMenu
+            anchorRef={statusBtnRef}
+            options={STATUSES.map((s) => ({ value: s, label: s }))}
+            current={doc.meta.status}
+            onSelect={(v) => setMeta({ status: v })}
+            onClose={() => setPickerOpen(null)}
+          />
+        )}
+
         <PanelGroup title="Actions">
           <Tooltip label="Add to Up Next">
             <button className="panel-btn" onClick={() => api.queueAdd(path).then(refresh)}>Add to Up Next</button>
           </Tooltip>
           <Tooltip label={editing ? 'View rendered' : 'Edit markdown'} keys={editing ? undefined : 'E'}>
-            <button className="panel-btn" onClick={() => { setDraft(doc.content); setEditing(!editing) }}>
+            <button className="panel-btn" onClick={() => (editing ? exitEditRequest() : enterEdit())}>
               {editing ? 'View rendered' : 'Edit markdown'}
             </button>
           </Tooltip>
