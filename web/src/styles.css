@@ -312,6 +312,68 @@ input:focus, select:focus, textarea:focus {
   opacity: 0.85;
 }
 
+/* ============ command palette ============ */
+.palette-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  background: rgba(11, 11, 11, 0.25);
+  display: flex;
+  justify-content: center;
+  padding-top: 18vh;
+}
+.palette-panel {
+  width: min(560px, 92vw);
+  max-height: 70vh;
+  background: var(--bg);
+  border: 1px solid var(--bord);
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(11, 11, 11, 0.18);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.palette-input {
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  font-size: 15px;
+  padding: 14px 16px;
+}
+.palette-input:focus { outline: none; box-shadow: none; }
+.palette-results { overflow-y: auto; max-height: 50vh; padding: 6px; }
+.palette-group-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding: 8px 10px 4px;
+}
+.palette-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 10px;
+  text-align: left;
+}
+.palette-row.highlighted { background: var(--sel); }
+.palette-row kbd {
+  font-family: var(--mono);
+  font-size: 10px;
+  border: 1px solid var(--bord);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--mut);
+}
+.palette-doc-path { font-size: 11.5px; color: var(--faint); }
+.palette-empty { padding: 20px; text-align: center; color: var(--faint); font-size: 12.5px; }
+
 /* ============ dialogs ============ */
 .dialog-overlay {
   position: fixed;

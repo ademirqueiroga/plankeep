@@ -8,6 +8,7 @@ import { SettingsView } from './components/SettingsView'
 import { SearchView } from './components/SearchView'
 import { DialogHost, dialog } from './components/Dialog'
 import { Tooltip } from './components/Tooltip'
+import { Palette } from './components/Palette'
 import { buildCommands, matchesShortcut, type DocApi } from './shortcuts'
 
 export type View =
@@ -34,6 +35,7 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem('pk-sidebar-width')) || 280)
   const resizing = useRef(false)
   const docApiRef = useRef<DocApi | null>(null)
+  const [paletteOpen, setPaletteOpen] = useState(false)
 
   const refresh = useCallback(async () => {
     const [t, q, inbox, g, meta] = await Promise.all([api.tree(), api.queue(), api.inbox(), api.gitStatus(), api.meta()])
@@ -52,16 +54,20 @@ export default function App() {
 
   const openDoc = useCallback((path: string) => setView({ kind: 'doc', path }), [])
 
-  // global shortcuts: cmd/ctrl+K -> search (Phase 3 routes this to the palette instead),
-  // single-key document shortcuts dispatched through the shared command list.
+  // global shortcuts: ⌘K/Ctrl+K and ⌥Space toggle the command palette,
+  // single-key document shortcuts dispatch through the shared command list.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || dialog.isOpen()) return
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      const isCmdK = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k'
+      // e.key for Alt+Space is a non-breaking space on macOS — e.code is the reliable check.
+      const isOptSpace = e.altKey && e.code === 'Space'
+      if (isCmdK || isOptSpace) {
         e.preventDefault()
-        setView({ kind: 'search' })
+        setPaletteOpen((o) => !o)
         return
       }
+      if (paletteOpen) return
       const target = e.target as HTMLElement
       const isTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable
       if (isTyping) return
@@ -76,7 +82,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [view, refresh, openDoc])
+  }, [view, refresh, openDoc, paletteOpen])
 
   // sidebar resize by dragging the right edge
   useEffect(() => {
@@ -139,8 +145,8 @@ export default function App() {
               </span>
             ))}
           </nav>
-          <Tooltip label="Search" keys="⌘K">
-            <button className="icon-btn topbar-btn" onClick={() => setView({ kind: 'search' })}>
+          <Tooltip label="Search or run a command" keys="⌘K">
+            <button className="icon-btn topbar-btn" onClick={() => setPaletteOpen(true)}>
               <SearchIcon />
             </button>
           </Tooltip>
@@ -155,6 +161,15 @@ export default function App() {
           {view.kind === 'settings' && <SettingsView refresh={refresh} />}
         </main>
       </div>
+      <Palette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        view={view}
+        setView={setView}
+        openDoc={openDoc}
+        refresh={refresh}
+        docApi={docApiRef.current}
+      />
       <DialogHost />
     </div>
   )
