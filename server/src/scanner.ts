@@ -37,6 +37,37 @@ export function projectOf(abs: string): string {
 }
 
 /**
+ * Find files matching a basename across scan roots (root *.md + immediate
+ * subdirectory root *.md — same coverage as scan()). Lets the UI resolve a
+ * browser-dropped file (which has no path) back to its likely source on disk.
+ */
+export function findByName(name: string): Array<{ path: string; project: string }> {
+  const config = loadConfig()
+  const hits: Array<{ path: string; project: string }> = []
+  const consider = (abs: string) => {
+    if (path.basename(abs) === name && isCandidateFile(abs)) hits.push({ path: abs, project: projectOf(abs) })
+  }
+  for (const rootRaw of config.scanRoots) {
+    const root = expandTilde(rootRaw)
+    if (!fs.existsSync(root)) continue
+    for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+      const abs = path.join(root, entry.name)
+      if (entry.isFile()) consider(abs)
+      else if (entry.isDirectory() && !entry.name.startsWith('.')) {
+        try {
+          for (const sub of fs.readdirSync(abs, { withFileTypes: true })) {
+            if (sub.isFile()) consider(path.join(abs, sub.name))
+          }
+        } catch {
+          continue
+        }
+      }
+    }
+  }
+  return hits
+}
+
+/**
  * Sweep scan roots for orphan markdown docs. For each root we look at the
  * root's own *.md files plus each immediate subdirectory's root-level *.md —
  * enough to cover ~/.claude/plans/*.md and ~/workspace/<repo>/*.md without

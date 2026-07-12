@@ -64,8 +64,8 @@ export function SettingsView({ refresh }: { refresh: () => Promise<void> }) {
 
   return (
     <div className="view">
-      <h1>⚙️ Settings</h1>
-      {msg && <div className="ai-banner">{msg} <button className="icon-btn" onClick={() => setMsg(null)}>✕</button></div>}
+      <h1>Settings</h1>
+      {msg && <div className="banner">{msg} <button className="icon-btn" onClick={() => setMsg(null)}>✕</button></div>}
 
       <section>
         <h2>Vault</h2>
@@ -112,12 +112,12 @@ export function SettingsView({ refresh }: { refresh: () => Promise<void> }) {
           </label>
         </div>
         <div className="field row">
-          <button className="primary" disabled={busy} onClick={sync}>🔁 Sync now (commit → pull --rebase → push)</button>
+          <button className="primary" disabled={busy} onClick={sync}>Sync now (commit → pull --rebase → push)</button>
         </div>
         {!git?.remote && (
           <div className="field row">
             <input value={repoName} onChange={(e) => setRepoName(e.target.value)} title="Repository name" />
-            <button disabled={busy} onClick={createRepo}>🐙 Create private GitHub repo (via gh)</button>
+            <button disabled={busy} onClick={createRepo}>Create private GitHub repo (via gh)</button>
           </div>
         )}
         <p className="hint">

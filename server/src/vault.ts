@@ -202,6 +202,26 @@ export function deleteFolder(rel: string): void {
   fs.rmSync(safePath(rel), { recursive: true })
 }
 
+export function renameFolder(from: string, to: string): void {
+  if (!from || !to) throw new Error('Refusing to rename vault root')
+  const dest = safePath(to)
+  fs.mkdirSync(path.dirname(dest), { recursive: true })
+  fs.renameSync(safePath(from), dest)
+}
+
+/** Count docs under a folder — used by the UI for safe-delete confirmation. */
+export function folderStats(rel: string): { docs: number } {
+  let docs = 0
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory() && !EXCLUDED_DIRS.has(entry.name)) walk(path.join(dir, entry.name))
+      else if (entry.name.endsWith('.md')) docs++
+    }
+  }
+  walk(safePath(rel))
+  return { docs }
+}
+
 export function guessType(filename: string): DocType {
   const n = filename.toLowerCase()
   if (n.includes('plan')) return 'plan'

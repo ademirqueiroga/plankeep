@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { execFile } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { Hono } from 'hono'
 import { serveStatic } from '@hono/node-server/serve-static'
@@ -79,6 +80,24 @@ export function buildApp(): Hono {
     await gitops.commitAll(`delete folder: ${rel}`)
     return c.json({ ok: true })
   })
+  api.post('/folders/rename', async (c) => {
+    const { from, to } = await c.req.json()
+    vault.renameFolder(from, to)
+    queue.renamePrefixInQueue(from, to)
+    await gitops.commitAll(`rename folder: ${from} -> ${to}`)
+    return c.json({ ok: true })
+  })
+  api.get('/folders/stats', (c) => c.json(vault.folderStats(c.req.query('path') ?? '')))
+
+  // ----- desktop niceties (server runs on the user's machine) -----
+  api.post('/reveal', async (c) => {
+    const { path: rel, absPath } = await c.req.json()
+    const target = absPath ?? vault.safePath(rel)
+    const cmd = process.platform === 'darwin' ? ['open', '-R', target] : ['xdg-open', path.dirname(target)]
+    execFile(cmd[0], cmd.slice(1))
+    return c.json({ ok: true })
+  })
+  api.get('/resolve-source', (c) => c.json(scanner.findByName(c.req.query('name') ?? '')))
 
   // ----- import -----
   api.post('/import', async (c) => {

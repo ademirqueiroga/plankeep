@@ -26,9 +26,9 @@ export function QueueView({ openDoc, refresh }: { openDoc: (p: string) => void; 
 
   return (
     <div className="view">
-      <h1>⏭️ Up Next</h1>
+      <h1>Up Next</h1>
       <p className="hint">Ordered queue of what you want to tackle next. Drag to reorder — the order is stored in the vault (<code>.plankeep/queue.yaml</code>) and visible to LLMs via MCP.</p>
-      {docs.length === 0 && <div className="empty-state">Queue is empty. Open a document and hit “⏭️ Up Next”.</div>}
+      {docs.length === 0 && <div className="empty-state">Queue is empty. Open a document and use “Add to Up Next”.</div>}
       <ol className="queue">
         {docs.map((d, i) => (
           <li

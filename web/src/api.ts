@@ -102,6 +102,10 @@ export const api = {
   deleteDoc: (path: string) => post('/api/docs/delete', { path }),
   createFolder: (path: string) => post('/api/folders', { path }),
   deleteFolder: (path: string) => post('/api/folders/delete', { path }),
+  renameFolder: (from: string, to: string) => post('/api/folders/rename', { from, to }),
+  folderStats: (path: string) => request<{ docs: number }>(`/api/folders/stats?path=${encodeURIComponent(path)}`),
+  reveal: (opts: { path?: string; absPath?: string }) => post('/api/reveal', opts),
+  resolveSource: (name: string) => request<Array<{ path: string; project: string }>>(`/api/resolve-source?name=${encodeURIComponent(name)}`),
   importFile: (sourcePath: string, folder?: string, mode?: string, project?: string) =>
     post<{ path: string }>('/api/import', { sourcePath, folder, mode, project }),
   importContent: (name: string, content: string, folder?: string) =>

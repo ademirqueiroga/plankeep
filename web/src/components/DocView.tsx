@@ -7,9 +7,9 @@ import { CopyBtn } from './CopyBtn'
 const TYPES = ['plan', 'findings', 'exploration', 'research', 'note'] as const
 const STATUSES = ['draft', 'active', 'done', 'archived'] as const
 const AI_ACTIONS = [
-  { id: 'improve', label: '✨ Improve readability' },
-  { id: 'checkboxify', label: '☑️ Add checkboxes' },
-  { id: 'refresh', label: '🔄 Refresh vs repo' },
+  { id: 'improve', label: 'Improve readability', hint: 'Rewrite for clarity, keep all information' },
+  { id: 'checkboxify', label: 'Add checkboxes', hint: 'Turn phases/steps into task lists' },
+  { id: 'refresh', label: 'Refresh vs repo', hint: 'Cross-check against the source repository' },
 ] as const
 
 const CHECKBOX_RE = /(^[ \t]*[-*+][ \t]+\[)( |x|X)(\])/gm
@@ -81,7 +81,7 @@ export function DocView({ path, config, refresh, onDeleted, onMoved }: DocViewPr
       if (j.status !== 'running') {
         if (pollRef.current) clearInterval(pollRef.current)
         setAiJob(null)
-        setAiMessage(j.status === 'done' ? `AI ${action} finished — document updated (committed to vault git).` : `AI ${action} failed: ${j.error}`)
+        setAiMessage(j.status === 'done' ? `AI ${action} finished — document updated and committed.` : `AI ${action} failed: ${j.error}`)
         await load()
         await refresh()
       }
@@ -111,92 +111,134 @@ export function DocView({ path, config, refresh, onDeleted, onMoved }: DocViewPr
   let checkboxIndex = -1
 
   return (
-    <div className="doc-view">
-      <header className="doc-header">
-        <div className="doc-title-row">
-          <h1>{doc.title}</h1>
-          <div className="doc-actions">
-            <button onClick={() => api.queueAdd(path).then(refresh)}>⏭️ Up Next</button>
-            {AI_ACTIONS.map((a) => (
-              <button key={a.id} disabled={!!aiJob} onClick={() => runAi(a.id)} title={a.id === 'refresh' ? 'Cross-checks the plan against the source repository using Claude' : undefined}>
-                {a.label}
-              </button>
-            ))}
-            <button onClick={() => { setDraft(doc.content); setEditing(!editing) }}>{editing ? '👁 View' : '✏️ Edit'}</button>
-            <button onClick={rename}>📂 Move</button>
-            <button className="danger" onClick={del}>🗑</button>
-          </div>
-        </div>
-        <div className="doc-meta-row">
-          <select value={doc.meta.type} onChange={(e) => setMeta({ type: e.target.value })}>
-            {TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <select value={doc.meta.status} onChange={(e) => setMeta({ status: e.target.value })}>
-            {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <input
-            className="tags-input"
-            defaultValue={doc.meta.tags.join(', ')}
-            placeholder="tags, comma, separated"
-            onBlur={(e) => {
-              const tags = e.target.value.split(',').map((t) => t.trim()).filter(Boolean)
-              if (tags.join(',') !== doc.meta.tags.join(',')) setMeta({ tags })
-            }}
-          />
-        </div>
-        <div className="doc-paths">
-          <span className="path-chip" title="Vault-relative path">{path}<CopyBtn value={path} /></span>
-          <span className="path-chip" title="Absolute path — paste into a Claude prompt">abs<CopyBtn value={doc.absPath} /></span>
-          <span className="path-chip" title="@-mention for Claude Code">@mention<CopyBtn value={`@${doc.absPath}`} /></span>
-          {doc.meta.source?.path && (
-            <span className="path-chip source" title={`Imported from ${doc.meta.source.path}`}>
-              src: {doc.meta.source.project ?? '?'}<CopyBtn value={doc.meta.source.path} />
-            </span>
-          )}
-        </div>
+    <div className="doc-layout">
+      <div className="doc-main">
         {(aiJob || aiMessage) && (
-          <div className={`ai-banner${aiMessage?.includes('failed') ? ' error' : ''}`}>
-            {aiJob ? `⏳ Running AI ${aiJob.action} via claude -p — this can take a few minutes…` : aiMessage}
+          <div className={`banner${aiMessage?.includes('failed') ? ' error' : ''}`}>
+            {aiJob ? `Running AI ${aiJob.action} via claude -p — this can take a few minutes…` : aiMessage}
             {aiMessage && <button className="icon-btn" onClick={() => setAiMessage(null)}>✕</button>}
           </div>
         )}
-      </header>
-
-      {editing ? (
-        <div className="editor">
-          <textarea value={draft} onChange={(e) => setDraft(e.target.value)} spellCheck={false} />
-          <div className="editor-actions">
-            <button
-              className="primary"
-              onClick={async () => {
-                await api.saveDoc(path, draft)
-                setEditing(false)
-                await load()
-                await refresh()
-              }}
-            >
-              💾 Save
-            </button>
-            <button onClick={() => setEditing(false)}>Cancel</button>
+        <div className="doc-title-block">
+          <h1 className="doc-title-serif">{doc.title}</h1>
+          <div className="doc-subtitle">
+            <span className={`status-pill s-${doc.meta.status}`}>{doc.meta.status}</span>
+            <span className="type-label">{doc.meta.type}</span>
+            {doc.meta.source?.project && <span className="type-label">from {doc.meta.source.project}</span>}
           </div>
         </div>
-      ) : (
-        <article className="markdown">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              input: (props) => {
-                if (props.type !== 'checkbox') return <input {...props} />
-                checkboxIndex++
-                const n = checkboxIndex
-                return <input type="checkbox" checked={props.checked ?? false} disabled={false} onChange={() => toggleCheckbox(n)} />
-              },
-            }}
-          >
-            {doc.body}
-          </ReactMarkdown>
-        </article>
-      )}
+
+        {editing ? (
+          <div className="editor">
+            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} spellCheck={false} />
+            <div className="editor-actions">
+              <button
+                className="primary"
+                onClick={async () => {
+                  await api.saveDoc(path, draft)
+                  setEditing(false)
+                  await load()
+                  await refresh()
+                }}
+              >
+                Save
+              </button>
+              <button onClick={() => setEditing(false)}>Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <article className="markdown">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                input: (props) => {
+                  if (props.type !== 'checkbox') return <input {...props} />
+                  checkboxIndex++
+                  const n = checkboxIndex
+                  return <input type="checkbox" checked={props.checked ?? false} disabled={false} onChange={() => toggleCheckbox(n)} />
+                },
+              }}
+            >
+              {doc.body}
+            </ReactMarkdown>
+          </article>
+        )}
+      </div>
+
+      <aside className="doc-panel">
+        <PanelGroup title="Properties">
+          <div className="prop-row">
+            <label>Type</label>
+            <select value={doc.meta.type} onChange={(e) => setMeta({ type: e.target.value })}>
+              {TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="prop-row">
+            <label>Status</label>
+            <select value={doc.meta.status} onChange={(e) => setMeta({ status: e.target.value })}>
+              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="prop-row">
+            <label>Tags</label>
+            <input
+              defaultValue={doc.meta.tags.join(', ')}
+              placeholder="comma, separated"
+              onBlur={(e) => {
+                const tags = e.target.value.split(',').map((t) => t.trim()).filter(Boolean)
+                if (tags.join(',') !== doc.meta.tags.join(',')) setMeta({ tags })
+              }}
+            />
+          </div>
+        </PanelGroup>
+
+        <PanelGroup title="Actions">
+          <button className="panel-btn" onClick={() => api.queueAdd(path).then(refresh)}>Add to Up Next</button>
+          <button className="panel-btn" onClick={() => { setDraft(doc.content); setEditing(!editing) }}>
+            {editing ? 'View rendered' : 'Edit markdown'}
+          </button>
+          <button className="panel-btn" onClick={rename}>Move / rename…</button>
+          <button className="panel-btn" onClick={() => api.reveal({ path })}>Reveal in Finder</button>
+        </PanelGroup>
+
+        <PanelGroup title="AI">
+          {AI_ACTIONS.map((a) => (
+            <button key={a.id} className="panel-btn" disabled={!!aiJob} title={a.hint} onClick={() => runAi(a.id)}>
+              {aiJob?.action === a.id ? 'Running…' : a.label}
+            </button>
+          ))}
+        </PanelGroup>
+
+        <PanelGroup title="Paths">
+          <PathRow label="Vault" value={path} />
+          <PathRow label="Absolute" value={doc.absPath} />
+          <PathRow label="@mention" value={`@${doc.absPath}`} />
+          {doc.meta.source?.path && <PathRow label="Source" value={doc.meta.source.path} />}
+        </PanelGroup>
+
+        <PanelGroup title="Danger">
+          <button className="panel-btn danger" onClick={del}>Delete document…</button>
+        </PanelGroup>
+      </aside>
+    </div>
+  )
+}
+
+function PanelGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="panel-group">
+      <div className="panel-group-title">{title}</div>
+      {children}
+    </div>
+  )
+}
+
+function PathRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="path-row" title={value}>
+      <span className="path-row-label">{label}</span>
+      <span className="path-row-value">{value}</span>
+      <CopyBtn value={value} />
     </div>
   )
 }

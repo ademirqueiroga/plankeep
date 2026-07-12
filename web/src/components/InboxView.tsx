@@ -28,13 +28,13 @@ export function InboxView({ config, openDoc, refresh }: InboxViewProps) {
   return (
     <div className="view">
       <div className="view-header">
-        <h1>📥 Inbox</h1>
-        <button onClick={runScan}>🔭 Scan for plans</button>
+        <h1>Inbox</h1>
+        <button onClick={runScan}>Scan for plans</button>
       </div>
       <p className="hint">
         Markdown files detected by the Claude Code hook or the scanner, waiting to be imported. Importing copies (or moves, per your choice) the file into the vault under a folder named after its source project.
       </p>
-      {scanMsg && <div className="ai-banner">{scanMsg}</div>}
+      {scanMsg && <div className="banner">{scanMsg}</div>}
       {items.length === 0 && <div className="empty-state">Nothing pending. New plan files written by Claude will show up here automatically.</div>}
       {items.map((item) => (
         <InboxRow key={item.path} item={item} defaultMode={config?.importMode ?? 'copy'} onDone={async (imported) => {
