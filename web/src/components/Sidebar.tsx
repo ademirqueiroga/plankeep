@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type Config, type DocSummary, type GitState, type TreeNode } from '../api'
 import type { View } from '../App'
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu'
@@ -31,7 +31,19 @@ export function Sidebar(props: SidebarProps) {
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({})
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [treeDropOver, setTreeDropOver] = useState(false)
+  const [dropTarget, setDropTarget] = useState<string | null>(null)
   const dragDepth = useRef(0)
+
+  // an aborted drag (Esc) fires no drop/dragleave on our elements — clear any stuck highlight
+  useEffect(() => {
+    const onDragEnd = () => {
+      setDropTarget(null)
+      setTreeDropOver(false)
+      dragDepth.current = 0
+    }
+    window.addEventListener('dragend', onDragEnd)
+    return () => window.removeEventListener('dragend', onDragEnd)
+  }, [])
 
   const isOpen = useCallback((path: string) => openFolders[path] !== false, [openFolders])
 
@@ -111,6 +123,7 @@ export function Sidebar(props: SidebarProps) {
     e.stopPropagation()
     dragDepth.current = 0
     setTreeDropOver(false)
+    setDropTarget(null)
     const internal = e.dataTransfer.getData('application/x-plankeep-paths')
     if (internal) await moveInternal(JSON.parse(internal), folder ?? '')
     else await importExternal(Array.from(e.dataTransfer.files), folder)
@@ -219,11 +232,11 @@ export function Sidebar(props: SidebarProps) {
       child.kind === 'folder' ? (
         <div key={child.path}>
           <div
-            className="tree-row folder-row"
+            className={`tree-row folder-row${dropTarget === child.path ? ' drop-target' : ''}`}
             style={{ paddingLeft: 8 + depth * 14 }}
             onClick={() => setOpenFolders({ ...openFolders, [child.path]: !isOpen(child.path) })}
             onContextMenu={(e) => showMenu(e, folderMenu(child.path))}
-            onDragOver={(e) => { e.preventDefault(); e.stopPropagation() }}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDropTarget(child.path) }}
             onDrop={(e) => handleDrop(e, child.path)}
           >
             <span className={`chevron${isOpen(child.path) ? ' open' : ''}`}>›</span>
@@ -298,8 +311,8 @@ export function Sidebar(props: SidebarProps) {
         className={`side-section tree-section${treeDropOver ? ' drop-over' : ''}`}
         onContextMenu={(e) => showMenu(e, backgroundMenu())}
         onDragEnter={(e) => { e.preventDefault(); dragDepth.current++; setTreeDropOver(true) }}
-        onDragLeave={() => { dragDepth.current--; if (dragDepth.current <= 0) setTreeDropOver(false) }}
-        onDragOver={(e) => e.preventDefault()}
+        onDragLeave={() => { dragDepth.current--; if (dragDepth.current <= 0) { setTreeDropOver(false); setDropTarget(null) } }}
+        onDragOver={(e) => { e.preventDefault(); setDropTarget('') }}
         onDrop={(e) => handleDrop(e, null)}
       >
         <div className="section-header static">
@@ -324,7 +337,13 @@ export function Sidebar(props: SidebarProps) {
             </div>
           )}
         </div>
-        <div className="drop-hint">Drop .md files anywhere in this area — they're filed under their source project</div>
+        <div className={`drop-hint${dropTarget !== null ? ' active' : ''}`}>
+          {dropTarget === null
+            ? "Drop .md files anywhere in this area — they're filed under their source project"
+            : dropTarget === ''
+              ? 'Drop to import at vault root'
+              : `Drop into ${dropTarget}`}
+        </div>
       </section>
 
       <footer className="side-footer">
