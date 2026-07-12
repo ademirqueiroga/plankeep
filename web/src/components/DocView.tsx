@@ -6,6 +6,7 @@ import { CopyBtn } from './CopyBtn'
 import { dialog } from './Dialog'
 import { Tooltip } from './Tooltip'
 import { PickerMenu } from './PickerMenu'
+import { LabelsEditor } from './LabelsEditor'
 import { ACTION_LABELS, ago } from './ActivityView'
 import type { DocApi } from '../shortcuts'
 
@@ -264,16 +265,8 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
             </button>
           </div>
           <div className="prop-row">
-            <label>Tags</label>
-            <input
-              ref={tagsInputRef}
-              defaultValue={doc.meta.tags.join(', ')}
-              placeholder="comma, separated"
-              onBlur={(e) => {
-                const tags = e.target.value.split(',').map((t) => t.trim()).filter(Boolean)
-                if (tags.join(',') !== doc.meta.tags.join(',')) setMeta({ tags })
-              }}
-            />
+            <label>Labels</label>
+            <LabelsEditor value={doc.meta.tags} onChange={(tags) => setMeta({ tags })} inputRef={tagsInputRef} />
           </div>
         </PanelGroup>
 

@@ -318,3 +318,18 @@ export function search(query: string): SearchHit[] {
   }
   return hits
 }
+
+export interface LabelCount {
+  label: string
+  count: number
+}
+
+export function labelCounts(): LabelCount[] {
+  const counts = new Map<string, number>()
+  for (const doc of listDocs()) {
+    for (const tag of doc.meta.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1)
+  }
+  return [...counts.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+}

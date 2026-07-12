@@ -116,6 +116,7 @@ export function buildApp(): Hono {
 
   // ----- search -----
   api.get('/search', (c) => c.json(vault.search(c.req.query('q') ?? '')))
+  api.get('/labels', (c) => c.json(vault.labelCounts()))
 
   // ----- queue -----
   api.get('/queue', (c) => c.json(queue.queueDocs()))

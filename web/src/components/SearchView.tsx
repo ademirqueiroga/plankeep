@@ -18,7 +18,7 @@ export function SearchView({ openDoc }: { openDoc: (p: string) => void }) {
   return (
     <div className="view">
       <h1>Search</h1>
-      <input className="search-input" autoFocus placeholder="Search titles, paths, tags and content…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <input className="search-input" autoFocus placeholder="Search titles, paths, labels and content…" value={q} onChange={(e) => setQ(e.target.value)} />
       {q.trim().length >= 2 && <p className="hint">{hits.length} result(s)</p>}
       {hits.map((h) => (
         <div key={h.path} className="search-hit" onClick={() => openDoc(h.path)}>

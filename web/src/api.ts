@@ -120,6 +120,7 @@ export const api = {
   importContent: (name: string, content: string, folder?: string) =>
     post<{ path: string }>('/api/import-content', { name, content, folder }),
   search: (q: string) => request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`),
+  labels: () => request<Array<{ label: string; count: number }>>('/api/labels'),
   queue: () => request<DocSummary[]>('/api/queue'),
   setQueue: (paths: string[]) => put<DocSummary[]>('/api/queue', { paths }),
   queueAdd: (path: string, position?: number) => post<DocSummary[]>('/api/queue/add', { path, position }),

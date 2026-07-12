@@ -411,6 +411,60 @@ input:focus, select:focus, textarea:focus {
 .dialog-field input { width: 100%; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
+/* ============ labels editor ============ */
+.labels-editor { position: relative; flex: 1; min-width: 0; }
+.labels-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--bord);
+  border-radius: 6px;
+  padding: 3px 5px;
+  background: var(--surf);
+}
+.labels-chips:focus-within { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }
+.label-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  border-radius: 10px;
+  padding: 1px 4px 1px 8px;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.label-chip button {
+  background: none;
+  border: none;
+  padding: 0 3px;
+  color: var(--brand);
+  font-size: 12px;
+  line-height: 1;
+}
+.label-chip button:hover { background: none; opacity: 0.6; }
+.labels-input {
+  flex: 1;
+  min-width: 60px;
+  border: none;
+  padding: 2px 3px;
+  font-size: 12.5px;
+}
+.labels-input:focus { outline: none; box-shadow: none; }
+.labels-suggestions {
+  position: absolute;
+  z-index: 1000;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--surf);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-menu);
+  padding: 5px;
+}
+
 /* ============ picker menu ============ */
 .picker-menu {
   position: fixed;
@@ -422,7 +476,7 @@ input:focus, select:focus, textarea:focus {
   box-shadow: var(--shadow-menu);
   padding: 5px;
 }
-.picker-menu .menu-item.picker-highlight { background: var(--hov); }
+.menu-item.picker-highlight { background: var(--hov); }
 .picker-check { color: var(--brand); font-size: 11px; }
 .prop-value-btn {
   flex: 1;
