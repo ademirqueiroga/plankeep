@@ -363,6 +363,8 @@ input:focus, select:focus, textarea:focus {
   text-align: left;
 }
 .palette-row.highlighted { background: var(--sel); }
+.palette-row.danger { color: var(--danger-fg); }
+.palette-row.danger.highlighted { background: var(--danger-bg); }
 .palette-row kbd {
   font-family: var(--mono);
   font-size: 10px;

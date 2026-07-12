@@ -36,6 +36,7 @@ export interface Command {
   title: string
   keys?: string
   group: 'Navigate' | 'Document' | 'Vault' | 'AI'
+  danger?: boolean
   when?: (ctx: Ctx) => boolean
   run: (ctx: Ctx) => void | Promise<void>
 }
@@ -76,7 +77,7 @@ export function buildCommands(ctx: Ctx): Command[] {
       when: () => inDoc,
       run: (c) => c.docApi?.runAi(a.id),
     })),
-    { id: 'doc-delete', title: 'Delete document…', group: 'Document', when: () => inDoc, run: (c) => c.docApi?.del() },
+    { id: 'doc-delete', title: 'Delete document…', group: 'Document', danger: true, when: () => inDoc, run: (c) => c.docApi?.del() },
   ]
 
   const vault: Command[] = [

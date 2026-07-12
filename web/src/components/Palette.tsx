@@ -111,7 +111,7 @@ export function Palette({ open, onClose, view, setView, openDoc, refresh, docApi
             <div className="palette-group">
               <div className="palette-group-title">Commands</div>
               {commands.map((cmd, i) => (
-                <PaletteRow key={cmd.id} highlighted={i === highlight} onMouseEnter={() => setHighlight(i)} onClick={() => runAt(i)}>
+                <PaletteRow key={cmd.id} highlighted={i === highlight} danger={cmd.danger} onMouseEnter={() => setHighlight(i)} onClick={() => runAt(i)}>
                   <span>{cmd.title}</span>
                   {cmd.keys && <kbd>{cmd.keys}</kbd>}
                 </PaletteRow>
@@ -141,17 +141,23 @@ export function Palette({ open, onClose, view, setView, openDoc, refresh, docApi
 
 function PaletteRow({
   highlighted,
+  danger,
   onMouseEnter,
   onClick,
   children,
 }: {
   highlighted: boolean
+  danger?: boolean
   onMouseEnter: () => void
   onClick: () => void
   children: React.ReactNode
 }) {
   return (
-    <button className={`palette-row${highlighted ? ' highlighted' : ''}`} onMouseEnter={onMouseEnter} onClick={onClick}>
+    <button
+      className={`palette-row${highlighted ? ' highlighted' : ''}${danger ? ' danger' : ''}`}
+      onMouseEnter={onMouseEnter}
+      onClick={onClick}
+    >
       {children}
     </button>
   )
