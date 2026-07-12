@@ -285,6 +285,41 @@ input:focus, select:focus, textarea:focus {
 .sync-pill.pending .sync-dot { background: var(--pending); }
 .sync-pill.error .sync-dot { background: var(--danger-fg); box-shadow: 0 0 0 3px var(--danger-bg); }
 
+/* ============ dialogs ============ */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(11, 11, 11, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dialog-panel {
+  width: min(440px, 90vw);
+  background: var(--bg);
+  border: 1px solid var(--bord);
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(11, 11, 11, 0.18);
+  padding: 20px;
+}
+.dialog-title {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 17px;
+  margin-bottom: 8px;
+}
+.dialog-body {
+  color: var(--mut);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+.dialog-field { margin-bottom: 16px; }
+.dialog-field label { display: block; font-size: 12px; color: var(--mut); margin-bottom: 5px; }
+.dialog-field input { width: 100%; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
 /* ============ context menu ============ */
 .context-menu {
   position: fixed;

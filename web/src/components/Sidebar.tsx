@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type Config, type DocSummary, type GitState, type TreeNode } from '../api'
 import type { View } from '../App'
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu'
+import { dialog } from './Dialog'
 
 const TYPE_ICONS: Record<string, string> = {
   plan: '◫',
@@ -134,9 +135,17 @@ export function Sidebar(props: SidebarProps) {
     const { docs } = await api.folderStats(path)
     const name = path.split('/').pop()!
     if (docs > 0) {
-      const typed = window.prompt(`Delete folder "${path}" and its ${docs} document(s)?\nType the folder name to confirm:`)
-      if (typed !== name) return
-    } else if (!window.confirm(`Delete empty folder "${path}"?`)) return
+      const ok = await dialog.confirmTyped({
+        title: 'Delete folder',
+        body: `This deletes "${path}" and its ${docs} document(s). Type the folder name to confirm.`,
+        mustType: name,
+        danger: true,
+      })
+      if (!ok) return
+    } else {
+      const ok = await dialog.confirm({ title: 'Delete empty folder?', body: `"${path}"`, danger: true, confirmLabel: 'Delete' })
+      if (!ok) return
+    }
     await api.deleteFolder(path)
     await refresh()
   }
@@ -149,12 +158,18 @@ export function Sidebar(props: SidebarProps) {
         { label: `Add ${paths.length} to Up Next`, onClick: async () => { for (const p of paths) await api.queueAdd(p); await refresh() } },
         { label: `Copy ${paths.length} paths`, onClick: () => navigator.clipboard.writeText(paths.map(absOf).join('\n')) },
         { label: 'Move to folder…', onClick: async () => {
-          const folder = window.prompt('Destination folder (empty = vault root):')
+          const folder = await dialog.prompt({ title: 'Move to folder', label: 'Destination folder (empty = vault root)' })
           if (folder !== null) await moveInternal(paths, folder.trim().replace(/^\/+|\/+$/g, ''))
         } },
         { separator: true },
         { label: `Delete ${paths.length} documents…`, danger: true, onClick: async () => {
-          if (!window.confirm(`Delete ${paths.length} documents? (history stays in vault git)`)) return
+          const ok = await dialog.confirm({
+            title: `Delete ${paths.length} documents?`,
+            body: 'History stays in vault git.',
+            danger: true,
+            confirmLabel: 'Delete',
+          })
+          if (!ok) return
           for (const p of paths) await api.deleteDoc(p)
           setSelected(new Set())
           await refresh()
@@ -166,7 +181,7 @@ export function Sidebar(props: SidebarProps) {
       { label: 'Add to Up Next', onClick: () => api.queueAdd(path).then(refresh) },
       { separator: true },
       { label: 'Rename / Move…', onClick: async () => {
-        const to = window.prompt('New vault-relative path:', path)
+        const to = await dialog.prompt({ title: 'Move / rename', label: 'New vault-relative path', initial: path })
         if (to && to !== path) { await api.move(path, to); await refresh(); openDoc(to) }
       } },
       { label: 'Copy path', hint: 'vault', onClick: () => navigator.clipboard.writeText(path) },
@@ -174,7 +189,13 @@ export function Sidebar(props: SidebarProps) {
       { label: 'Reveal in Finder', onClick: () => api.reveal({ path }) },
       { separator: true },
       { label: 'Delete…', danger: true, onClick: async () => {
-        if (window.confirm(`Delete ${path}? (history stays in vault git)`)) {
+        const ok = await dialog.confirm({
+          title: 'Delete document?',
+          body: `${path} — history stays in vault git.`,
+          danger: true,
+          confirmLabel: 'Delete',
+        })
+        if (ok) {
           await api.deleteDoc(path)
           await refresh()
         }
@@ -184,11 +205,11 @@ export function Sidebar(props: SidebarProps) {
 
   const folderMenu = (path: string): MenuItem[] => [
     { label: 'New subfolder…', onClick: async () => {
-      const name = window.prompt('Subfolder name:')
+      const name = await dialog.prompt({ title: 'New subfolder', label: 'Subfolder name' })
       if (name?.trim()) { await api.createFolder(`${path}/${name.trim()}`); await refresh() }
     } },
     { label: 'Rename…', onClick: async () => {
-      const name = window.prompt('New folder name:', path.split('/').pop())
+      const name = await dialog.prompt({ title: 'Rename folder', label: 'New folder name', initial: path.split('/').pop() })
       if (name?.trim()) {
         const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
         const to = parent ? `${parent}/${name.trim()}` : name.trim()
@@ -204,7 +225,7 @@ export function Sidebar(props: SidebarProps) {
 
   const backgroundMenu = (): MenuItem[] => [
     { label: 'New folder…', onClick: async () => {
-      const name = window.prompt('Folder name (use / for nesting):')
+      const name = await dialog.prompt({ title: 'New folder', label: 'Folder name (use / for nesting)' })
       if (name?.trim()) { await api.createFolder(name.trim()); await refresh() }
     } },
     { label: 'Scan for plans', onClick: async () => { await api.scan(); await refresh() } },
@@ -321,7 +342,7 @@ export function Sidebar(props: SidebarProps) {
             className="icon-btn"
             title="New folder"
             onClick={async () => {
-              const name = window.prompt('Folder name (use / for nesting):')
+              const name = await dialog.prompt({ title: 'New folder', label: 'Folder name (use / for nesting)' })
               if (name?.trim()) { await api.createFolder(name.trim()); await refresh() }
             }}
           >

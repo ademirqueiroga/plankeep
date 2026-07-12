@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api, type Config, type FullDoc } from '../api'
 import { CopyBtn } from './CopyBtn'
+import { dialog } from './Dialog'
 
 const TYPES = ['plan', 'findings', 'exploration', 'research', 'note'] as const
 const STATUSES = ['draft', 'active', 'done', 'archived'] as const
@@ -89,7 +90,7 @@ export function DocView({ path, config, refresh, onDeleted, onMoved }: DocViewPr
   }
 
   const rename = async () => {
-    const to = window.prompt('Move/rename (vault-relative path):', path)
+    const to = await dialog.prompt({ title: 'Move / rename', label: 'Vault-relative path', initial: path })
     if (to && to !== path) {
       await api.move(path, to)
       await refresh()
@@ -98,7 +99,13 @@ export function DocView({ path, config, refresh, onDeleted, onMoved }: DocViewPr
   }
 
   const del = async () => {
-    if (window.confirm(`Delete ${path}? (previous versions stay in vault git history)`)) {
+    const ok = await dialog.confirm({
+      title: 'Delete document?',
+      body: `${path} — previous versions stay in vault git history.`,
+      danger: true,
+      confirmLabel: 'Delete',
+    })
+    if (ok) {
       await api.deleteDoc(path)
       await refresh()
       onDeleted()

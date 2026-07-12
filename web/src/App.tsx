@@ -6,6 +6,7 @@ import { QueueView } from './components/QueueView'
 import { InboxView } from './components/InboxView'
 import { SettingsView } from './components/SettingsView'
 import { SearchView } from './components/SearchView'
+import { DialogHost } from './components/Dialog'
 
 export type View =
   | { kind: 'doc'; path: string }
@@ -135,6 +136,7 @@ export default function App() {
           {view.kind === 'settings' && <SettingsView refresh={refresh} />}
         </main>
       </div>
+      <DialogHost />
     </div>
   )
 }
