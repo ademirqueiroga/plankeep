@@ -139,7 +139,7 @@ export function buildApp(): Hono {
   })
 
   // ----- inbox & scan -----
-  api.get('/inbox', (c) => c.json(inbox.pending()))
+  api.get('/inbox', (c) => c.json(inbox.pendingEnriched()))
   api.post('/inbox/dismiss', async (c) => {
     const { path: p } = await c.req.json()
     inbox.setStatus(p, 'dismissed')

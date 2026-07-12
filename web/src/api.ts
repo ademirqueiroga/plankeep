@@ -42,6 +42,9 @@ export interface InboxItem {
   detectedAt: string
   origin: 'hook' | 'scan'
   status: string
+  mtime: number
+  title: string
+  preview: string[]
 }
 
 export interface GitState {
