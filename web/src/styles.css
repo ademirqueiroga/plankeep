@@ -285,6 +285,33 @@ input:focus, select:focus, textarea:focus {
 .sync-pill.pending .sync-dot { background: var(--pending); }
 .sync-pill.error .sync-dot { background: var(--danger-fg); box-shadow: 0 0 0 3px var(--danger-bg); }
 
+/* ============ tooltips ============ */
+.tooltip-anchor { display: inline-flex; position: relative; }
+.tooltip-tip {
+  position: fixed;
+  z-index: 3000;
+  transform: translateX(-50%);
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 11px;
+  border-radius: 6px;
+  padding: 4px 8px;
+  box-shadow: var(--shadow-menu);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.tooltip-tip kbd {
+  font-family: var(--mono);
+  font-size: 10px;
+  border: 1px solid rgba(249, 249, 247, 0.3);
+  border-radius: 4px;
+  padding: 1px 4px;
+  opacity: 0.85;
+}
+
 /* ============ dialogs ============ */
 .dialog-overlay {
   position: fixed;

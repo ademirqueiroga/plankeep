@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import { api, type Config, type FullDoc } from '../api'
 import { CopyBtn } from './CopyBtn'
 import { dialog } from './Dialog'
+import { Tooltip } from './Tooltip'
 
 const TYPES = ['plan', 'findings', 'exploration', 'research', 'note'] as const
 const STATUSES = ['draft', 'active', 'done', 'archived'] as const
@@ -200,19 +201,25 @@ export function DocView({ path, config, refresh, onDeleted, onMoved }: DocViewPr
         </PanelGroup>
 
         <PanelGroup title="Actions">
-          <button className="panel-btn" onClick={() => api.queueAdd(path).then(refresh)}>Add to Up Next</button>
-          <button className="panel-btn" onClick={() => { setDraft(doc.content); setEditing(!editing) }}>
-            {editing ? 'View rendered' : 'Edit markdown'}
-          </button>
+          <Tooltip label="Add to Up Next">
+            <button className="panel-btn" onClick={() => api.queueAdd(path).then(refresh)}>Add to Up Next</button>
+          </Tooltip>
+          <Tooltip label={editing ? 'View rendered' : 'Edit markdown'} keys={editing ? undefined : 'E'}>
+            <button className="panel-btn" onClick={() => { setDraft(doc.content); setEditing(!editing) }}>
+              {editing ? 'View rendered' : 'Edit markdown'}
+            </button>
+          </Tooltip>
           <button className="panel-btn" onClick={rename}>Move / rename…</button>
           <button className="panel-btn" onClick={() => api.reveal({ path })}>Reveal in Finder</button>
         </PanelGroup>
 
         <PanelGroup title="AI">
           {AI_ACTIONS.map((a) => (
-            <button key={a.id} className="panel-btn" disabled={!!aiJob} title={a.hint} onClick={() => runAi(a.id)}>
-              {aiJob?.action === a.id ? 'Running…' : a.label}
-            </button>
+            <Tooltip key={a.id} label={a.hint}>
+              <button className="panel-btn" disabled={!!aiJob} onClick={() => runAi(a.id)}>
+                {aiJob?.action === a.id ? 'Running…' : a.label}
+              </button>
+            </Tooltip>
           ))}
         </PanelGroup>
 

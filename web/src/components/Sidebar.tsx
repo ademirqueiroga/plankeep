@@ -3,6 +3,7 @@ import { api, type Config, type DocSummary, type GitState, type TreeNode } from 
 import type { View } from '../App'
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu'
 import { dialog } from './Dialog'
+import { Tooltip } from './Tooltip'
 
 const TYPE_ICONS: Record<string, string> = {
   plan: '◫',
@@ -338,16 +339,17 @@ export function Sidebar(props: SidebarProps) {
       >
         <div className="section-header static">
           Vault
-          <button
-            className="icon-btn"
-            title="New folder"
-            onClick={async () => {
-              const name = await dialog.prompt({ title: 'New folder', label: 'Folder name (use / for nesting)' })
-              if (name?.trim()) { await api.createFolder(name.trim()); await refresh() }
-            }}
-          >
-            +
-          </button>
+          <Tooltip label="New folder">
+            <button
+              className="icon-btn"
+              onClick={async () => {
+                const name = await dialog.prompt({ title: 'New folder', label: 'Folder name (use / for nesting)' })
+                if (name?.trim()) { await api.createFolder(name.trim()); await refresh() }
+              }}
+            >
+              +
+            </button>
+          </Tooltip>
         </div>
         <div className="tree" onClick={(e) => { if (e.target === e.currentTarget) setSelected(new Set()) }}>
           {tree?.children?.length ? (
@@ -368,19 +370,22 @@ export function Sidebar(props: SidebarProps) {
       </section>
 
       <footer className="side-footer">
-        <button className={`sync-pill ${syncState.cls}`} title="Git sync state — open settings" onClick={() => setView({ kind: 'settings' })}>
-          <span className="sync-dot" /> {syncState.label}
-        </button>
-        <button
-          className={`icon-btn gear${view.kind === 'settings' ? ' active' : ''}`}
-          title="Settings"
-          onClick={() => setView({ kind: 'settings' })}
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
-        </button>
+        <Tooltip label="Git sync state — click for settings">
+          <button className={`sync-pill ${syncState.cls}`} onClick={() => setView({ kind: 'settings' })}>
+            <span className="sync-dot" /> {syncState.label}
+          </button>
+        </Tooltip>
+        <Tooltip label="Settings">
+          <button
+            className={`icon-btn gear${view.kind === 'settings' ? ' active' : ''}`}
+            onClick={() => setView({ kind: 'settings' })}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
+        </Tooltip>
       </footer>
 
       {menu && <ContextMenu menu={menu} onClose={() => setMenu(null)} />}

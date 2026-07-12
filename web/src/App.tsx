@@ -6,7 +6,9 @@ import { QueueView } from './components/QueueView'
 import { InboxView } from './components/InboxView'
 import { SettingsView } from './components/SettingsView'
 import { SearchView } from './components/SearchView'
-import { DialogHost } from './components/Dialog'
+import { DialogHost, dialog } from './components/Dialog'
+import { Tooltip } from './components/Tooltip'
+import { buildCommands, matchesShortcut, type DocApi } from './shortcuts'
 
 export type View =
   | { kind: 'doc'; path: string }
@@ -31,6 +33,7 @@ export default function App() {
   const [config, setConfig] = useState<Config | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem('pk-sidebar-width')) || 280)
   const resizing = useRef(false)
+  const docApiRef = useRef<DocApi | null>(null)
 
   const refresh = useCallback(async () => {
     const [t, q, inbox, g, meta] = await Promise.all([api.tree(), api.queue(), api.inbox(), api.gitStatus(), api.meta()])
@@ -47,17 +50,33 @@ export default function App() {
     return () => clearInterval(timer)
   }, [refresh])
 
-  // cmd/ctrl+K -> search
+  const openDoc = useCallback((path: string) => setView({ kind: 'doc', path }), [])
+
+  // global shortcuts: cmd/ctrl+K -> search (Phase 3 routes this to the palette instead),
+  // single-key document shortcuts dispatched through the shared command list.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || dialog.isOpen()) return
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setView({ kind: 'search' })
+        return
+      }
+      const target = e.target as HTMLElement
+      const isTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable
+      if (isTyping) return
+      const ctx = { view, setView, openDoc, refresh, docApi: docApiRef.current ?? undefined }
+      for (const cmd of buildCommands(ctx)) {
+        if (!cmd.keys || !matchesShortcut(cmd.keys, e)) continue
+        if (cmd.when && !cmd.when(ctx)) continue
+        e.preventDefault()
+        cmd.run(ctx)
+        return
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [view, refresh, openDoc])
 
   // sidebar resize by dragging the right edge
   useEffect(() => {
@@ -83,8 +102,6 @@ export default function App() {
       window.removeEventListener('mouseup', up)
     }
   }, [])
-
-  const openDoc = useCallback((path: string) => setView({ kind: 'doc', path }), [])
 
   const crumb =
     view.kind === 'doc'
@@ -122,9 +139,11 @@ export default function App() {
               </span>
             ))}
           </nav>
-          <button className="icon-btn topbar-btn" title="Search (⌘K)" onClick={() => setView({ kind: 'search' })}>
-            <SearchIcon />
-          </button>
+          <Tooltip label="Search" keys="⌘K">
+            <button className="icon-btn topbar-btn" onClick={() => setView({ kind: 'search' })}>
+              <SearchIcon />
+            </button>
+          </Tooltip>
         </header>
         <main className="main">
           {view.kind === 'doc' && (
