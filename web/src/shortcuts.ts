@@ -21,6 +21,7 @@ export interface DocApi {
   del: () => void
   rename: () => void
   addToQueue: () => void
+  toggleOutline: () => void
 }
 
 export interface Ctx {
@@ -70,6 +71,7 @@ export function buildCommands(ctx: Ctx): Command[] {
     { id: 'doc-copy-abs', title: 'Copy absolute path', group: 'Document', when: () => inDoc, run: (c) => c.docApi?.copyAbsPath() },
     { id: 'doc-copy-mention', title: 'Copy @mention', group: 'Document', when: () => inDoc, run: (c) => c.docApi?.copyMention() },
     { id: 'doc-add-queue', title: 'Add to Up Next', group: 'Document', when: () => inDoc, run: (c) => c.docApi?.addToQueue() },
+    { id: 'doc-toggle-outline', title: 'Toggle outline', group: 'Document', when: () => inDoc, run: (c) => c.docApi?.toggleOutline() },
     { id: 'doc-rename', title: 'Move / rename…', group: 'Document', when: () => inDoc, run: (c) => c.docApi?.rename() },
     { id: 'doc-reveal', title: 'Reveal in Finder', group: 'Document', when: () => !!docPath, run: () => docPath && api.reveal({ path: docPath }) },
     ...AI_ACTIONS.map((a): Command => ({

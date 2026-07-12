@@ -8,6 +8,7 @@ import { Tooltip } from './Tooltip'
 import { PickerMenu } from './PickerMenu'
 import { LabelsEditor } from './LabelsEditor'
 import { ACTION_LABELS, ago } from './ActivityView'
+import { OutlineNav, type OutlineItem } from './OutlineNav'
 import type { DocApi } from '../shortcuts'
 
 const TYPES = ['plan', 'findings', 'exploration', 'research', 'note'] as const
@@ -54,6 +55,10 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
   const statusBtnRef = useRef<HTMLButtonElement>(null)
   const typeBtnRef = useRef<HTMLButtonElement>(null)
   const tagsInputRef = useRef<HTMLInputElement>(null)
+  const articleRef = useRef<HTMLElement>(null)
+  const [outline, setOutline] = useState<OutlineItem[]>([])
+  const [activeHeadingId, setActiveHeadingId] = useState<string | null>(null)
+  const [outlinePinned, setOutlinePinned] = useState(() => localStorage.getItem('pk-outline-pinned') === '1')
 
   const load = useCallback(async () => {
     try {
@@ -78,6 +83,68 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
       if (pollRef.current) clearInterval(pollRef.current)
     }
   }, [load, loadLastRun])
+
+  useEffect(() => {
+    localStorage.setItem('pk-outline-pinned', outlinePinned ? '1' : '0')
+  }, [outlinePinned])
+
+  // heading extraction — DOM-based so it always matches what ReactMarkdown rendered
+  useEffect(() => {
+    if (editing || !doc) {
+      setOutline([])
+      return
+    }
+    const el = articleRef.current
+    if (!el) return
+    const headings = Array.from(el.querySelectorAll('h1, h2, h3, h4'))
+    const title = doc.title.trim().toLowerCase()
+    let skippedTitleH1 = false
+    const items: OutlineItem[] = []
+    headings.forEach((h, i) => {
+      const text = (h.textContent ?? '').trim()
+      if (!skippedTitleH1 && h.tagName === 'H1' && text.toLowerCase() === title) {
+        skippedTitleH1 = true
+        return
+      }
+      const id = `pk-h-${i}`
+      h.id = id
+      items.push({ id, depth: Number(h.tagName[1]), text: text.length > 60 ? `${text.slice(0, 60)}…` : text })
+    })
+    setOutline(items)
+    setActiveHeadingId(items[0]?.id ?? null)
+  }, [doc, editing])
+
+  // scroll-spy over the .doc-main scroll container
+  useEffect(() => {
+    if (outline.length === 0) return
+    const container = articleRef.current?.closest('.doc-main') as HTMLElement | null
+    if (!container) return
+    let ticking = false
+    const compute = () => {
+      ticking = false
+      const threshold = container.getBoundingClientRect().top + 96
+      let current: string | null = outline[0]?.id ?? null
+      for (const item of outline) {
+        const el = document.getElementById(item.id)
+        if (!el) continue
+        if (el.getBoundingClientRect().top <= threshold) current = item.id
+        else break
+      }
+      setActiveHeadingId(current)
+    }
+    const onScroll = () => {
+      if (ticking) return
+      ticking = true
+      requestAnimationFrame(compute)
+    }
+    compute()
+    container.addEventListener('scroll', onScroll)
+    return () => container.removeEventListener('scroll', onScroll)
+  }, [outline])
+
+  const navigateToHeading = useCallback((id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
 
   const toggleCheckbox = async (n: number) => {
     if (!doc) return
@@ -188,6 +255,7 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
       del,
       rename,
       addToQueue: () => api.queueAdd(path).then(refresh),
+      toggleOutline: () => setOutlinePinned((p) => !p),
     })
     return () => onDocApi(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -200,6 +268,15 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
 
   return (
     <div className="doc-layout">
+      {!editing && outline.length >= 2 && (
+        <OutlineNav
+          items={outline}
+          activeId={activeHeadingId}
+          onNavigate={navigateToHeading}
+          pinned={outlinePinned}
+          onPinnedChange={setOutlinePinned}
+        />
+      )}
       <div className="doc-main">
         {(aiJob || aiMessage) && (
           <div className={`banner${aiMessage?.includes('failed') ? ' error' : ''}`}>
@@ -247,7 +324,7 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
             </div>
           </div>
         ) : (
-          <article className="markdown">
+          <article className="markdown" ref={articleRef}>
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
