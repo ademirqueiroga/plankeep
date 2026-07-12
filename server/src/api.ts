@@ -11,6 +11,7 @@ import * as queue from './queue.js'
 import * as inbox from './inbox.js'
 import * as scanner from './scanner.js'
 import * as ai from './ai.js'
+import * as memories from './memories.js'
 
 export function buildApp(): Hono {
   const app = new Hono()
@@ -119,6 +120,14 @@ export function buildApp(): Hono {
   // ----- search -----
   api.get('/search', (c) => c.json(vault.search(c.req.query('q') ?? '')))
   api.get('/labels', (c) => c.json(vault.labelCounts()))
+
+  // ----- Claude memories (read-only browser) -----
+  api.get('/memories', (c) => c.json(memories.listMemoryProjects()))
+  api.get('/memories/doc', (c) => {
+    const slug = c.req.query('slug') ?? ''
+    const file = c.req.query('file') ?? ''
+    return c.json(memories.readMemory(slug, file))
+  })
 
   // ----- queue -----
   api.get('/queue', (c) => c.json(queue.queueDocs()))

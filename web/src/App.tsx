@@ -7,6 +7,7 @@ import { InboxView } from './components/InboxView'
 import { SettingsView } from './components/SettingsView'
 import { SearchView } from './components/SearchView'
 import { ActivityView } from './components/ActivityView'
+import { MemoriesView } from './components/MemoriesView'
 import { DialogHost, dialog } from './components/Dialog'
 import { Tooltip } from './components/Tooltip'
 import { Palette } from './components/Palette'
@@ -19,6 +20,8 @@ export type View =
   | { kind: 'search' }
   | { kind: 'settings' }
   | { kind: 'activity' }
+  | { kind: 'memories' }
+  | { kind: 'memory'; slug: string; file: string; displayName: string; title: string }
 
 const VIEW_TITLES: Record<string, string> = {
   queue: 'Up Next',
@@ -26,6 +29,7 @@ const VIEW_TITLES: Record<string, string> = {
   search: 'Search',
   settings: 'Settings',
   activity: 'Activity',
+  memories: 'Memories',
 }
 
 export default function App() {
@@ -119,7 +123,9 @@ export default function App() {
   const crumb =
     view.kind === 'doc'
       ? view.path.split('/')
-      : [VIEW_TITLES[view.kind]]
+      : view.kind === 'memory'
+        ? ['Memories', view.displayName, view.title]
+        : [VIEW_TITLES[view.kind]]
 
   return (
     <div className="app">
@@ -177,6 +183,7 @@ export default function App() {
           {view.kind === 'search' && <SearchView openDoc={openDoc} />}
           {view.kind === 'settings' && <SettingsView refresh={refresh} />}
           {view.kind === 'activity' && <ActivityView openDoc={openDoc} />}
+          {(view.kind === 'memories' || view.kind === 'memory') && <MemoriesView view={view} setView={setView} />}
         </main>
       </div>
       <Palette

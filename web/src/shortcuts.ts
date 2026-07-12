@@ -56,6 +56,7 @@ export function buildCommands(ctx: Ctx): Command[] {
     { id: 'go-queue', title: 'Go to Up Next', group: 'Navigate', run: (c) => c.setView({ kind: 'queue' }) },
     { id: 'go-inbox', title: 'Go to Inbox', group: 'Navigate', run: (c) => c.setView({ kind: 'inbox' }) },
     { id: 'go-activity', title: 'Go to Activity', group: 'Navigate', run: (c) => c.setView({ kind: 'activity' }) },
+    { id: 'go-memories', title: 'Go to Memories', group: 'Navigate', run: (c) => c.setView({ kind: 'memories' }) },
     { id: 'go-search', title: 'Go to Search view', group: 'Navigate', run: (c) => c.setView({ kind: 'search' }) },
     { id: 'go-settings', title: 'Go to Settings', group: 'Navigate', run: (c) => c.setView({ kind: 'settings' }) },
   ]

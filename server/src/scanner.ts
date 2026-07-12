@@ -17,12 +17,16 @@ const EXCLUDED_NAMES = new Set([
   'pull_request_template.md',
 ])
 
+/** Claude Code's own per-project memory files — never treat these as plan candidates. */
+export const CLAUDE_MEMORY_RE = /\/\.claude\/projects\/[^/]+\/memory\//
+
 export function isCandidateFile(abs: string): boolean {
   if (!abs.endsWith('.md')) return false
   if (EXCLUDED_NAMES.has(path.basename(abs).toLowerCase())) return false
   const vault = vaultRoot()
   if (abs === vault || abs.startsWith(vault + path.sep)) return false
   if (/\/(node_modules|\.git|\.idea|build|dist)\//.test(abs)) return false
+  if (CLAUDE_MEMORY_RE.test(abs)) return false
   return true
 }
 

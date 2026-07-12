@@ -35,6 +35,8 @@ export interface TreeNode {
 
 const EXCLUDED_DIRS = new Set(['.git', '.plankeep', 'node_modules'])
 const CHECKBOX_RE = /^\s*[-*+]\s+\[( |x|X)\]/gm
+// Kept in sync with scanner.ts's CLAUDE_MEMORY_RE — duplicated to avoid a circular import (scanner.ts imports from vault.ts).
+const CLAUDE_MEMORY_RE = /\/\.claude\/projects\/[^/]+\/memory\//
 
 export function vaultRoot(): string {
   return expandTilde(loadConfig().vaultPath)
@@ -259,6 +261,9 @@ export interface ImportResult {
 /** Import an external markdown file into the vault (copy or move). */
 export function importFile(sourceAbs: string, opts: { folder?: string; mode?: 'copy' | 'move'; project?: string }): ImportResult {
   const src = expandTilde(sourceAbs)
+  if (CLAUDE_MEMORY_RE.test(src)) {
+    throw new Error('Claude memory files cannot be imported — browse them in the Memories section')
+  }
   const raw = fs.readFileSync(src, 'utf8')
   const mode = opts.mode ?? loadConfig().importMode
   const folder = (opts.folder ?? opts.project ?? '').replace(/^\/+|\/+$/g, '')

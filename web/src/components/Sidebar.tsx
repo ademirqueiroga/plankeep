@@ -390,6 +390,12 @@ export function Sidebar(props: SidebarProps) {
           <span className="nav-glyph">◷</span> Activity
           {aiRunningCount > 0 && <span className="badge running">{aiRunningCount}</span>}
         </button>
+        <button
+          className={`nav-item${view.kind === 'memories' || view.kind === 'memory' ? ' active' : ''}`}
+          onClick={() => setView({ kind: 'memories' })}
+        >
+          <span className="nav-glyph">◈</span> Memories
+        </button>
       </nav>
 
       <section className="side-section queue-section">

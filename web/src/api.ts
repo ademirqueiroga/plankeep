@@ -79,6 +79,30 @@ export interface SearchHit {
   snippets: string[]
 }
 
+export interface MemoryFile {
+  file: string
+  title: string
+  description: string
+  mtime: number
+}
+
+export interface MemoryProject {
+  slug: string
+  displayName: string
+  dir: string
+  count: number
+  latestMtime: number
+  hasIndex: boolean
+  files: MemoryFile[]
+}
+
+export interface MemoryDoc {
+  content: string
+  body: string
+  frontmatter: Record<string, unknown>
+  absPath: string
+}
+
 export interface Config {
   vaultPath: string
   importMode: 'copy' | 'move'
@@ -121,6 +145,9 @@ export const api = {
     post<{ path: string }>('/api/import-content', { name, content, folder }),
   search: (q: string) => request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`),
   labels: () => request<Array<{ label: string; count: number }>>('/api/labels'),
+  memories: () => request<MemoryProject[]>('/api/memories'),
+  memoryDoc: (slug: string, file: string) =>
+    request<MemoryDoc>(`/api/memories/doc?slug=${encodeURIComponent(slug)}&file=${encodeURIComponent(file)}`),
   queue: () => request<DocSummary[]>('/api/queue'),
   setQueue: (paths: string[]) => put<DocSummary[]>('/api/queue', { paths }),
   queueAdd: (path: string, position?: number) => post<DocSummary[]>('/api/queue/add', { path, position }),
