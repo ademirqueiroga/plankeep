@@ -22,6 +22,7 @@ export interface DocApi {
   rename: () => void
   addToQueue: () => void
   toggleOutline: () => void
+  togglePanel: () => void
 }
 
 export interface Ctx {
@@ -30,13 +31,14 @@ export interface Ctx {
   openDoc: (path: string) => void
   refresh: () => Promise<void>
   docApi?: DocApi
+  toggleSidebar: () => void
 }
 
 export interface Command {
   id: string
   title: string
   keys?: string
-  group: 'Navigate' | 'Document' | 'Vault' | 'AI'
+  group: 'Navigate' | 'Document' | 'Vault' | 'AI' | 'View'
   danger?: boolean
   when?: (ctx: Ctx) => boolean
   run: (ctx: Ctx) => void | Promise<void>
@@ -84,6 +86,11 @@ export function buildCommands(ctx: Ctx): Command[] {
     { id: 'doc-delete', title: 'Delete document…', group: 'Document', danger: true, when: () => inDoc, run: (c) => c.docApi?.del() },
   ]
 
+  const view: Command[] = [
+    { id: 'view-toggle-sidebar', title: 'Toggle sidebar', keys: '[', group: 'View', run: (c) => c.toggleSidebar() },
+    { id: 'view-toggle-panel', title: 'Toggle right panel', keys: ']', group: 'View', when: () => inDoc, run: (c) => c.docApi?.togglePanel() },
+  ]
+
   const vault: Command[] = [
     {
       id: 'vault-new-folder',
@@ -101,5 +108,5 @@ export function buildCommands(ctx: Ctx): Command[] {
     { id: 'vault-sync', title: 'Sync now', group: 'Vault', run: async (c) => { await api.gitSync(); await c.refresh() } },
   ]
 
-  return [...navigate, ...document, ...vault]
+  return [...navigate, ...document, ...view, ...vault]
 }

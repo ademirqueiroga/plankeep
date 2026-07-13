@@ -112,6 +112,11 @@ export interface Config {
   port: number
 }
 
+export interface McpInfo {
+  node: string
+  cliPath: string | null
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init)
   const data = await res.json()
@@ -125,23 +130,27 @@ const put = <T,>(url: string, body: unknown): Promise<T> =>
   request<T>(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 
 export const api = {
-  meta: () => request<{ vaultPath: string; config: Config }>('/api/meta'),
+  meta: () => request<{ vaultPath: string; config: Config; mcp: McpInfo }>('/api/meta'),
   saveSettings: (config: Partial<Config>) => put<{ config: Config }>('/api/settings', config),
   tree: () => request<TreeNode>('/api/tree'),
   doc: (path: string) => request<FullDoc>(`/api/doc?path=${encodeURIComponent(path)}`),
   saveDoc: (path: string, content: string) => put<DocSummary>('/api/doc', { path, content }),
   saveBody: (path: string, body: string) => put<DocSummary>('/api/doc', { path, body }),
   setMeta: (path: string, patch: Partial<DocMeta>) => post<DocMeta>('/api/doc/meta', { path, ...patch }),
-  move: (from: string, to: string) => post('/api/docs/move', { from, to }),
+  move: (from: string, to: string, leaveLink?: boolean) => post('/api/docs/move', { from, to, leaveLink }),
   deleteDoc: (path: string) => post('/api/docs/delete', { path }),
   createFolder: (path: string) => post('/api/folders', { path }),
   deleteFolder: (path: string) => post('/api/folders/delete', { path }),
-  renameFolder: (from: string, to: string) => post('/api/folders/rename', { from, to }),
+  renameFolder: (from: string, to: string, leaveLink?: boolean) => post('/api/folders/rename', { from, to, leaveLink }),
   folderStats: (path: string) => request<{ docs: number }>(`/api/folders/stats?path=${encodeURIComponent(path)}`),
+  activity: (q: { path?: string; folder?: string; abs?: string }) => {
+    const params = new URLSearchParams(q as Record<string, string>)
+    return request<{ lastClaudeWrite: string | null; path?: string }>(`/api/activity?${params.toString()}`)
+  },
   reveal: (opts: { path?: string; absPath?: string }) => post('/api/reveal', opts),
   resolveSource: (name: string) => request<Array<{ path: string; project: string }>>(`/api/resolve-source?name=${encodeURIComponent(name)}`),
-  importFile: (sourcePath: string, folder?: string, mode?: string, project?: string) =>
-    post<{ path: string }>('/api/import', { sourcePath, folder, mode, project }),
+  importFile: (sourcePath: string, folder?: string, mode?: string, project?: string, leaveLink?: boolean) =>
+    post<{ path: string }>('/api/import', { sourcePath, folder, mode, project, leaveLink }),
   importContent: (name: string, content: string, folder?: string) =>
     post<{ path: string }>('/api/import-content', { name, content, folder }),
   search: (q: string) => request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`),

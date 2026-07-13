@@ -131,3 +131,8 @@ export function getJob(id: string): AiJob | undefined {
 export function listJobs(): AiJob[] {
   return [...jobs.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, 50)
 }
+
+/** Is any job still running against this doc, or (for a folder path) any doc beneath it? */
+export function hasRunningJobFor(rel: string): boolean {
+  return [...jobs.values()].some((j) => j.status === 'running' && (j.path === rel || j.path.startsWith(rel + '/')))
+}

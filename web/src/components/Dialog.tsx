@@ -1,15 +1,37 @@
 import { useEffect, useRef, useState } from 'react'
 
-type ConfirmOpts = { title: string; body?: string; confirmLabel?: string; danger?: boolean }
+type ConfirmOpts = { title: string; body?: string; warning?: string; confirmLabel?: string; danger?: boolean }
 type PromptOpts = { title: string; body?: string; label?: string; initial?: string; placeholder?: string; confirmLabel?: string }
-type ConfirmTypedOpts = { title: string; body?: string; mustType: string; danger?: boolean }
+type ConfirmTypedOpts = { title: string; body?: string; warning?: string; mustType: string; danger?: boolean }
 type SaveDiscardOpts = { title: string; body?: string }
+type ConfirmOptionOpts = {
+  title: string
+  body?: string
+  warning?: string
+  confirmLabel?: string
+  danger?: boolean
+  checkboxLabel: string
+  checkboxInitial?: boolean
+}
+type PromptOptionOpts = {
+  title: string
+  body?: string
+  warning?: string
+  label?: string
+  initial?: string
+  placeholder?: string
+  confirmLabel?: string
+  checkboxLabel: string
+  checkboxInitial?: boolean
+}
 
 type Request =
   | { kind: 'confirm'; opts: ConfirmOpts; resolve: (v: boolean) => void }
   | { kind: 'prompt'; opts: PromptOpts; resolve: (v: string | null) => void }
   | { kind: 'confirmTyped'; opts: ConfirmTypedOpts; resolve: (v: boolean) => void }
   | { kind: 'saveDiscard'; opts: SaveDiscardOpts; resolve: (v: 'save' | 'discard' | 'cancel') => void }
+  | { kind: 'confirmOption'; opts: ConfirmOptionOpts; resolve: (v: { ok: boolean; checked: boolean }) => void }
+  | { kind: 'promptOption'; opts: PromptOptionOpts; resolve: (v: { value: string; checked: boolean } | null) => void }
 
 let listener: ((req: Request | null) => void) | null = null
 
@@ -30,6 +52,12 @@ export const dialog = {
   saveDiscard(opts: SaveDiscardOpts): Promise<'save' | 'discard' | 'cancel'> {
     return new Promise((resolve) => push({ kind: 'saveDiscard', opts, resolve }))
   },
+  confirmOption(opts: ConfirmOptionOpts): Promise<{ ok: boolean; checked: boolean }> {
+    return new Promise((resolve) => push({ kind: 'confirmOption', opts, resolve }))
+  },
+  promptOption(opts: PromptOptionOpts): Promise<{ value: string; checked: boolean } | null> {
+    return new Promise((resolve) => push({ kind: 'promptOption', opts, resolve }))
+  },
   isOpen(): boolean {
     return currentOpenCount > 0
   },
@@ -42,6 +70,7 @@ export function DialogHost() {
   const panelRef = useRef<HTMLDivElement>(null)
   const [typedValue, setTypedValue] = useState('')
   const [promptValue, setPromptValue] = useState('')
+  const [checkboxValue, setCheckboxValue] = useState(true)
 
   useEffect(() => {
     listener = (r) => setReq(r)
@@ -53,7 +82,8 @@ export function DialogHost() {
   useEffect(() => {
     currentOpenCount = req ? currentOpenCount + 1 : Math.max(0, currentOpenCount - 1)
     if (req?.kind === 'confirmTyped') setTypedValue('')
-    if (req?.kind === 'prompt') setPromptValue(req.opts.initial ?? '')
+    if (req?.kind === 'prompt' || req?.kind === 'promptOption') setPromptValue(req.opts.initial ?? '')
+    if (req?.kind === 'confirmOption' || req?.kind === 'promptOption') setCheckboxValue(req.opts.checkboxInitial ?? true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [req])
 
@@ -71,13 +101,17 @@ export function DialogHost() {
         e.preventDefault()
         if (req.kind === 'saveDiscard') finish(req.resolve, 'cancel')
         else if (req.kind === 'prompt') finish(req.resolve, null)
+        else if (req.kind === 'promptOption') finish(req.resolve, null)
+        else if (req.kind === 'confirmOption') finish(req.resolve, { ok: false, checked: false })
         else finish(req.resolve, false)
-      } else if (e.key === 'Enter' && req.kind !== 'prompt') {
-        // prompt's own input handles Enter (needs its live value)
+      } else if (e.key === 'Enter' && req.kind !== 'prompt' && req.kind !== 'promptOption') {
+        // prompt/promptOption's own input handles Enter (needs its live value)
         if (req.kind === 'confirmTyped') {
           if (typedValue === req.opts.mustType) finish(req.resolve, true)
         } else if (req.kind === 'saveDiscard') {
           finish(req.resolve, 'save')
+        } else if (req.kind === 'confirmOption') {
+          finish(req.resolve, { ok: true, checked: checkboxValue })
         } else {
           finish(req.resolve, true)
         }
@@ -97,23 +131,28 @@ export function DialogHost() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [req, typedValue])
+  }, [req, typedValue, checkboxValue])
 
   if (!req) return null
 
   const onOverlayClick = () => {
     if (req.kind === 'saveDiscard') finish(req.resolve, 'cancel')
     else if (req.kind === 'prompt') finish(req.resolve, null)
+    else if (req.kind === 'promptOption') finish(req.resolve, null)
+    else if (req.kind === 'confirmOption') finish(req.resolve, { ok: false, checked: false })
     else finish(req.resolve, false)
   }
+
+  const warning = 'warning' in req.opts ? req.opts.warning : undefined
 
   return (
     <div className="dialog-overlay" onMouseDown={onOverlayClick}>
       <div className="dialog-panel" ref={panelRef} onMouseDown={(e) => e.stopPropagation()}>
         <div className="dialog-title">{req.opts.title}</div>
         {req.opts.body && <div className="dialog-body">{req.opts.body}</div>}
+        {warning && <div className="dialog-warning">⚠ {warning}</div>}
 
-        {req.kind === 'prompt' && (
+        {(req.kind === 'prompt' || req.kind === 'promptOption') && (
           <div className="dialog-field">
             {req.opts.label && <label>{req.opts.label}</label>}
             <input
@@ -124,7 +163,8 @@ export function DialogHost() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault()
-                  finish(req.resolve, promptValue)
+                  if (req.kind === 'promptOption') finish(req.resolve, { value: promptValue, checked: checkboxValue })
+                  else finish(req.resolve, promptValue)
                 }
               }}
             />
@@ -146,6 +186,13 @@ export function DialogHost() {
               }}
             />
           </div>
+        )}
+
+        {(req.kind === 'confirmOption' || req.kind === 'promptOption') && (
+          <label className="dialog-checkbox">
+            <input type="checkbox" checked={checkboxValue} onChange={(e) => setCheckboxValue(e.target.checked)} />
+            {req.opts.checkboxLabel}
+          </label>
         )}
 
         <div className="dialog-actions">
@@ -186,6 +233,29 @@ export function DialogHost() {
               <button onClick={() => finish(req.resolve, 'cancel')}>Cancel</button>
               <button className="danger" onClick={() => finish(req.resolve, 'discard')}>Discard</button>
               <button autoFocus className="primary" onClick={() => finish(req.resolve, 'save')}>Save</button>
+            </>
+          )}
+          {req.kind === 'confirmOption' && (
+            <>
+              <button onClick={() => finish(req.resolve, { ok: false, checked: false })}>Cancel</button>
+              <button
+                autoFocus
+                className={req.opts.danger ? 'danger' : 'primary'}
+                onClick={() => finish(req.resolve, { ok: true, checked: checkboxValue })}
+              >
+                {req.opts.confirmLabel ?? 'Confirm'}
+              </button>
+            </>
+          )}
+          {req.kind === 'promptOption' && (
+            <>
+              <button onClick={() => finish(req.resolve, null)}>Cancel</button>
+              <button
+                className="primary"
+                onClick={() => finish(req.resolve, { value: promptValue, checked: checkboxValue })}
+              >
+                {req.opts.confirmLabel ?? 'Confirm'}
+              </button>
             </>
           )}
         </div>

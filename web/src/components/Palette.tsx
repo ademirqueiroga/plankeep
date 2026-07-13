@@ -22,9 +22,10 @@ interface PaletteProps {
   openDoc: (path: string) => void
   refresh: () => Promise<void>
   docApi: DocApi | null
+  toggleSidebar: () => void
 }
 
-export function Palette({ open, onClose, view, setView, openDoc, refresh, docApi }: PaletteProps) {
+export function Palette({ open, onClose, view, setView, openDoc, refresh, docApi, toggleSidebar }: PaletteProps) {
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<SearchHit[]>([])
   const [highlight, setHighlight] = useState(0)
@@ -40,7 +41,10 @@ export function Palette({ open, onClose, view, setView, openDoc, refresh, docApi
     }
   }, [open])
 
-  const ctx = useMemo(() => ({ view, setView, openDoc, refresh, docApi: docApi ?? undefined }), [view, setView, openDoc, refresh, docApi])
+  const ctx = useMemo(
+    () => ({ view, setView, openDoc, refresh, docApi: docApi ?? undefined, toggleSidebar }),
+    [view, setView, openDoc, refresh, docApi, toggleSidebar],
+  )
 
   const commands = useMemo(
     () => buildCommands(ctx).filter((c) => (!c.when || c.when(ctx)) && fuzzyMatch(query, c.title)),

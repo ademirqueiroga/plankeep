@@ -8,8 +8,11 @@ async function main(): Promise<void> {
   switch (command) {
     case 'serve': {
       const { buildApp } = await import('./api.js')
-      const { ensureVaultRepo } = await import('./gitops.js')
+      const { ensureVaultRepo, commitAll } = await import('./gitops.js')
+      const { cleanStaleLinks } = await import('./vault.js')
       await ensureVaultRepo()
+      const removed = cleanStaleLinks()
+      if (removed > 0) await commitAll(`cleanup: ${removed} stale link(s)`)
       const port = Number(process.argv[3] ?? loadConfig().port)
       serve({ fetch: buildApp().fetch, port })
       console.log(`PlanKeep serving on http://localhost:${port} (vault: ${loadConfig().vaultPath})`)

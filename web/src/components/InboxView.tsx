@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api, type Config, type InboxItem } from '../api'
 import { CopyBtn } from './CopyBtn'
 import { dialog } from './Dialog'
+import { activityWarning } from '../moveGuard'
 
 type SortMode = 'mtime' | 'added' | 'path'
 const SORT_KEY = 'pk-inbox-sort'
@@ -127,8 +128,23 @@ function InboxRow({
   const doImport = async () => {
     setBusy(true)
     try {
-      const r = await api.importFile(item.path, folder, mode, item.project)
+      let leaveLink: boolean | undefined
+      if (mode === 'move') {
+        const res = await dialog.confirmOption({
+          title: 'Import (move)',
+          body: `Move "${item.path}" into the vault at ${folder || 'vault root'}?`,
+          warning: await activityWarning({ abs: item.path }),
+          confirmLabel: 'Import',
+          checkboxLabel: 'Leave a symlink at the original location',
+          checkboxInitial: true,
+        })
+        if (!res.ok) return
+        leaveLink = res.checked
+      }
+      const r = await api.importFile(item.path, folder, mode, item.project, leaveLink)
       await onDone(r.path)
+    } catch (e) {
+      window.alert((e as Error).message)
     } finally {
       setBusy(false)
     }

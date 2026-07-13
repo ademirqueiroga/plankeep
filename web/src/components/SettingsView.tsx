@@ -1,20 +1,34 @@
 import { useEffect, useState } from 'react'
-import { api, type Config, type GitState } from '../api'
+import { api, type Config, type GitState, type McpInfo } from '../api'
 import { CopyBtn } from './CopyBtn'
+import { ShortcutsModal } from './ShortcutsModal'
+
+const MCP_TOOLS = [
+  'list_documents', 'get_document', 'save_document', 'import_file',
+  'search_documents', 'set_metadata', 'get_up_next_queue', 'add_to_up_next', 'list_inbox',
+]
 
 export function SettingsView({ refresh }: { refresh: () => Promise<void> }) {
   const [config, setConfig] = useState<Config | null>(null)
   const [vaultPath, setVaultPath] = useState('')
+  const [mcp, setMcp] = useState<McpInfo | null>(null)
   const [git, setGit] = useState<GitState | null>(null)
   const [log, setLog] = useState<Array<{ hash: string; date: string; message: string }>>([])
   const [msg, setMsg] = useState<string | null>(null)
   const [repoName, setRepoName] = useState('plans-vault')
   const [busy, setBusy] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [mcpCollapsed, setMcpCollapsed] = useState(() => localStorage.getItem('pk-mcp-setup-collapsed') === '1')
+
+  useEffect(() => {
+    localStorage.setItem('pk-mcp-setup-collapsed', mcpCollapsed ? '1' : '0')
+  }, [mcpCollapsed])
 
   const load = async () => {
     const meta = await api.meta()
     setConfig(meta.config)
     setVaultPath(meta.vaultPath)
+    setMcp(meta.mcp)
     setGit(await api.gitStatus())
     setLog(await api.gitLog())
   }
@@ -80,6 +94,14 @@ export function SettingsView({ refresh }: { refresh: () => Promise<void> }) {
             <option value="move">move — original file is deleted after import</option>
           </select>
         </div>
+      </section>
+
+      <section>
+        <button className="collapsible-toggle" onClick={() => setMcpCollapsed((c) => !c)}>
+          <span className={`chevron${!mcpCollapsed ? ' open' : ''}`}>›</span>
+          <h2>Connect an LLM (MCP)</h2>
+        </button>
+        {!mcpCollapsed && <McpSetup mcp={mcp} />}
       </section>
 
       <section>
@@ -165,6 +187,70 @@ export function SettingsView({ refresh }: { refresh: () => Promise<void> }) {
           ))}
         </div>
       </section>
+
+      <section>
+        <h2>Keyboard shortcuts</h2>
+        <button onClick={() => setShortcutsOpen(true)}>View keyboard shortcuts…</button>
+      </section>
+
+      <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+    </div>
+  )
+}
+
+function McpSetup({ mcp }: { mcp: McpInfo | null }) {
+  const node = mcp?.node ?? '/absolute/path/to/node'
+  const cliPath = mcp?.cliPath ?? '/absolute/path/to/plankeep/server/dist/cli.js'
+  const claudeCodeCmd = `claude mcp add --scope user plankeep -- ${node} ${cliPath} mcp`
+  const desktopConfig = JSON.stringify(
+    { mcpServers: { plankeep: { command: node, args: [cliPath, 'mcp'] } } },
+    null,
+    2,
+  )
+
+  return (
+    <div className="collapsible-body">
+      <p className="hint">
+        PlanKeep isn't discovered automatically — an LLM needs its MCP server registered once so it can list,
+        search, and file documents straight into this vault instead of scattering plans in repo roots.
+      </p>
+
+      {mcp && !mcp.cliPath && (
+        <div className="banner error">
+          <span className="banner-body">
+            Build output not found — run <code>npm run build -w server</code> once, then reopen Settings for a ready-to-copy command.
+          </span>
+        </div>
+      )}
+
+      <h3>Claude Code</h3>
+      <p className="hint">Run once in a terminal (applies to new sessions only):</p>
+      <div className="mcp-cmd">
+        <code>{claudeCodeCmd}</code>
+        <CopyBtn value={claudeCodeCmd} />
+      </div>
+
+      <h3>Claude Desktop</h3>
+      <p className="hint">Add this under <code>mcpServers</code> in your <code>claude_desktop_config.json</code>:</p>
+      <div className="mcp-cmd">
+        <pre>{desktopConfig}</pre>
+        <CopyBtn value={desktopConfig} />
+      </div>
+
+      <h3>Tools exposed</h3>
+      <p className="hint">
+        {MCP_TOOLS.map((t, i) => (
+          <span key={t}>
+            {i > 0 && ', '}
+            <code>{t}</code>
+          </span>
+        ))}
+      </p>
+
+      <p className="hint">
+        Tip: add a note in the project's CLAUDE.md telling Claude to file plans here via <code>save_document</code> (with{' '}
+        <code>folder</code> set to the project name) instead of leaving them in the repo root.
+      </p>
     </div>
   )
 }

@@ -12,6 +12,7 @@ import * as inbox from './inbox.js'
 import * as scanner from './scanner.js'
 import * as ai from './ai.js'
 import * as memories from './memories.js'
+import * as activity from './activity.js'
 
 export function buildApp(): Hono {
   const app = new Hono()
@@ -20,12 +21,14 @@ export function buildApp(): Hono {
   api.onError((err, c) => c.json({ error: err.message }, 500))
 
   // ----- meta / settings -----
-  api.get('/meta', (c) =>
-    c.json({
+  api.get('/meta', (c) => {
+    const cliPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'cli.js')
+    return c.json({
       vaultPath: vault.vaultRoot(),
       config: loadConfig(),
-    }),
-  )
+      mcp: { node: process.execPath, cliPath: fs.existsSync(cliPath) ? cliPath : null },
+    })
+  })
   api.put('/settings', async (c) => {
     const body = await c.req.json()
     const config = { ...loadConfig(), ...body, git: { ...loadConfig().git, ...(body.git ?? {}) } }
@@ -57,15 +60,33 @@ export function buildApp(): Hono {
     await gitops.commitAll(`meta: ${rel}`)
     return c.json(meta)
   })
+  const AI_JOB_BLOCK = 'An AI action is currently running on this document — wait for it to finish.'
+
+  /** Best-effort relative symlink at `fromAbs` pointing to `toAbs`; skips silently if something already exists there. */
+  const leaveLinkAt = (fromAbs: string, toAbs: string) => {
+    if (fs.existsSync(fromAbs)) return
+    try {
+      // realpath the containing dir first — see the matching comment in vault.importFile.
+      const realDir = fs.realpathSync(path.dirname(fromAbs))
+      fs.symlinkSync(path.relative(realDir, toAbs), fromAbs)
+    } catch {
+      // best-effort — the move itself already succeeded
+    }
+  }
+
   api.post('/docs/move', async (c) => {
-    const { from, to } = await c.req.json()
+    const { from, to, leaveLink } = await c.req.json()
+    if (ai.hasRunningJobFor(from)) return c.json({ error: AI_JOB_BLOCK }, 409)
+    const fromAbs = vault.safePath(from)
     vault.moveDoc(from, to)
     queue.renameInQueue(from, to)
+    if (leaveLink) leaveLinkAt(fromAbs, vault.safePath(to))
     await gitops.commitAll(`move: ${from} -> ${to}`)
     return c.json({ ok: true })
   })
   api.post('/docs/delete', async (c) => {
     const { path: rel } = await c.req.json()
+    if (ai.hasRunningJobFor(rel)) return c.json({ error: AI_JOB_BLOCK }, 409)
     vault.deleteDoc(rel)
     queue.removeFromQueue(rel)
     await gitops.commitAll(`delete: ${rel}`)
@@ -79,18 +100,35 @@ export function buildApp(): Hono {
   })
   api.post('/folders/delete', async (c) => {
     const { path: rel } = await c.req.json()
+    if (ai.hasRunningJobFor(rel)) return c.json({ error: AI_JOB_BLOCK }, 409)
     vault.deleteFolder(rel)
     await gitops.commitAll(`delete folder: ${rel}`)
     return c.json({ ok: true })
   })
   api.post('/folders/rename', async (c) => {
-    const { from, to } = await c.req.json()
+    const { from, to, leaveLink } = await c.req.json()
+    if (ai.hasRunningJobFor(from)) return c.json({ error: AI_JOB_BLOCK }, 409)
+    const fromAbs = vault.safePath(from)
     vault.renameFolder(from, to)
     queue.renamePrefixInQueue(from, to)
+    if (leaveLink) leaveLinkAt(fromAbs, vault.safePath(to))
     await gitops.commitAll(`rename folder: ${from} -> ${to}`)
     return c.json({ ok: true })
   })
   api.get('/folders/stats', (c) => c.json(vault.folderStats(c.req.query('path') ?? '')))
+
+  // ----- Claude activity (presence sensor for move safety) -----
+  api.get('/activity', (c) => {
+    const rel = c.req.query('path')
+    const folder = c.req.query('folder')
+    const abs = c.req.query('abs')
+    if (abs) return c.json({ lastClaudeWrite: activity.lastClaudeWrite(abs) })
+    if (folder !== undefined) {
+      const hit = activity.lastClaudeWriteUnder(vault.safePath(folder))
+      return c.json({ lastClaudeWrite: hit?.at ?? null, path: hit ? path.relative(vault.vaultRoot(), hit.path) : undefined })
+    }
+    return c.json({ lastClaudeWrite: activity.lastClaudeWrite(vault.safePath(rel ?? '')) })
+  })
 
   // ----- desktop niceties (server runs on the user's machine) -----
   api.post('/reveal', async (c) => {
@@ -104,8 +142,8 @@ export function buildApp(): Hono {
 
   // ----- import -----
   api.post('/import', async (c) => {
-    const { sourcePath, folder, mode, project } = await c.req.json()
-    const result = vault.importFile(sourcePath, { folder, mode, project })
+    const { sourcePath, folder, mode, project, leaveLink } = await c.req.json()
+    const result = vault.importFile(sourcePath, { folder, mode, project, leaveLink })
     inbox.setStatus(sourcePath, 'imported')
     await gitops.commitAll(`import: ${result.path}`)
     return c.json(result)
@@ -157,7 +195,12 @@ export function buildApp(): Hono {
     inbox.setStatus(p, 'dismissed')
     return c.json({ ok: true })
   })
-  api.post('/scan', (c) => c.json(scanner.scan()))
+  api.post('/scan', async (c) => {
+    const result = scanner.scan()
+    const removed = vault.cleanStaleLinks()
+    if (removed > 0) await gitops.commitAll(`cleanup: ${removed} stale link(s)`)
+    return c.json(result)
+  })
 
   // ----- git -----
   api.get('/git/status', async (c) => c.json(await gitops.gitState()))

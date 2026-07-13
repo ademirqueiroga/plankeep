@@ -10,6 +10,7 @@ import { LabelsEditor } from './LabelsEditor'
 import { ACTION_LABELS, ago } from './ActivityView'
 import { OutlineNav, type OutlineItem } from './OutlineNav'
 import type { DocApi } from '../shortcuts'
+import { activityWarning } from '../moveGuard'
 
 const TYPES = ['plan', 'findings', 'exploration', 'research', 'note'] as const
 const STATUSES = ['draft', 'active', 'done', 'archived'] as const
@@ -38,9 +39,10 @@ interface DocViewProps {
   onMoved: (newPath: string) => void
   onDocApi?: (api: DocApi | null) => void
   onOpenActivity: () => void
+  onPanelCollapsedChange?: (collapsed: boolean) => void
 }
 
-export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, onOpenActivity }: DocViewProps) {
+export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, onOpenActivity, onPanelCollapsedChange }: DocViewProps) {
   const [doc, setDoc] = useState<FullDoc | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
@@ -59,6 +61,7 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
   const [outline, setOutline] = useState<OutlineItem[]>([])
   const [activeHeadingId, setActiveHeadingId] = useState<string | null>(null)
   const [outlinePinned, setOutlinePinned] = useState(() => localStorage.getItem('pk-outline-pinned') === '1')
+  const [panelCollapsed, setPanelCollapsed] = useState(() => localStorage.getItem('pk-doc-panel-collapsed') === '1')
 
   const load = useCallback(async () => {
     try {
@@ -87,6 +90,12 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
   useEffect(() => {
     localStorage.setItem('pk-outline-pinned', outlinePinned ? '1' : '0')
   }, [outlinePinned])
+
+  useEffect(() => {
+    localStorage.setItem('pk-doc-panel-collapsed', panelCollapsed ? '1' : '0')
+    onPanelCollapsedChange?.(panelCollapsed)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelCollapsed])
 
   // heading extraction — DOM-based so it always matches what ReactMarkdown rendered
   useEffect(() => {
@@ -185,11 +194,22 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
   }
 
   const rename = async () => {
-    const to = await dialog.prompt({ title: 'Move / rename', label: 'Vault-relative path', initial: path })
-    if (to && to !== path) {
-      await api.move(path, to)
-      await refresh()
-      onMoved(to)
+    const res = await dialog.promptOption({
+      title: 'Move / rename',
+      label: 'Vault-relative path',
+      initial: path,
+      warning: await activityWarning({ path }),
+      checkboxLabel: 'Leave a symlink at the old location',
+      checkboxInitial: true,
+    })
+    if (res && res.value && res.value !== path) {
+      try {
+        await api.move(path, res.value, res.checked)
+        await refresh()
+        onMoved(res.value)
+      } catch (e) {
+        window.alert((e as Error).message)
+      }
     }
   }
 
@@ -197,13 +217,18 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
     const ok = await dialog.confirm({
       title: 'Delete document?',
       body: `${path} — previous versions stay in vault git history.`,
+      warning: await activityWarning({ path }),
       danger: true,
       confirmLabel: 'Delete',
     })
     if (ok) {
-      await api.deleteDoc(path)
-      await refresh()
-      onDeleted()
+      try {
+        await api.deleteDoc(path)
+        await refresh()
+        onDeleted()
+      } catch (e) {
+        window.alert((e as Error).message)
+      }
     }
   }
 
@@ -256,6 +281,7 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
       rename,
       addToQueue: () => api.queueAdd(path).then(refresh),
       toggleOutline: () => setOutlinePinned((p) => !p),
+      togglePanel: () => setPanelCollapsed((p) => !p),
     })
     return () => onDocApi(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -342,7 +368,21 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
         )}
       </div>
 
+      {panelCollapsed ? (
+        <Tooltip label="Show panel" keys="]">
+          <button className="doc-panel-rail" onClick={() => setPanelCollapsed(false)}>
+            «
+          </button>
+        </Tooltip>
+      ) : (
       <aside className="doc-panel">
+        <div className="doc-panel-top">
+          <Tooltip label="Hide panel" keys="]">
+            <button className="icon-btn" onClick={() => setPanelCollapsed(true)}>
+              »
+            </button>
+          </Tooltip>
+        </div>
         <PanelGroup title="Properties">
           <div className="prop-row">
             <label>Type</label>
@@ -418,6 +458,7 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
           <button className="panel-btn danger" onClick={del}>Delete document…</button>
         </PanelGroup>
       </aside>
+      )}
     </div>
   )
 }

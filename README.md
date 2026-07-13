@@ -59,7 +59,7 @@ Add to `~/.claude/settings.json` (global — watches every project). Use absolut
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "Write",
+        "matcher": "Write|Edit",
         "hooks": [
           {
             "type": "command",
@@ -73,7 +73,7 @@ Add to `~/.claude/settings.json` (global — watches every project). Use absolut
 }
 ```
 
-Every markdown file Claude writes lands in the inbox, except infra files (README/CLAUDE/AGENTS/CHANGELOG/LICENSE/…), files already in the vault, and anything under `node_modules`/`.git`/`build`/`dist`. The hook always exits 0 and prints nothing, so it can never disturb a session.
+Every markdown file Claude writes lands in the inbox, except infra files (README/CLAUDE/AGENTS/CHANGELOG/LICENSE/…) and anything under `node_modules`/`.git`/`build`/`dist`. Writes to markdown files already in the vault are instead recorded as activity (`~/.plankeep/activity.json`) so the UI can warn before moving a doc a Claude session may still be using. The hook always exits 0 and prints nothing, so it can never disturb a session. Already-running sessions won't pick up a settings change until restarted.
 
 ## Setup: MCP server (let LLMs use the vault)
 
@@ -121,7 +121,7 @@ Layout: `server/` (TypeScript — vault core, Hono API, MCP, CLI, hook) and `web
 
 ## Troubleshooting
 
-- **Hook not firing**: `echo '{"tool_name":"Write","tool_input":{"file_path":"/tmp/x-plan.md"}}' | node server/dist/cli.js hook` then check `~/.plankeep/inbox.json`; validate settings with `jq . ~/.claude/settings.json`; open `/hooks` in Claude Code or restart it to reload config.
+- **Hook not firing**: `echo '{"tool_name":"Write","tool_input":{"file_path":"/tmp/x-plan.md"}}' | node server/dist/cli.js hook` then check `~/.plankeep/inbox.json` (or, for a vault file, `~/.plankeep/activity.json`); validate settings with `jq . ~/.claude/settings.json`; open `/hooks` in Claude Code or restart it to reload config.
 - **MCP not listed**: `claude mcp list` — re-add with absolute paths; applies to new sessions only.
 - **AI action fails with "output did not look like the updated document"**: the model returned prose instead of the doc; the original file is untouched — retry.
 - **Sync error / conflict**: fix inside `~/plans-vault` with git directly, then Sync again.

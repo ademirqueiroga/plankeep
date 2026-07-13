@@ -41,9 +41,17 @@ export default function App() {
   const [git, setGit] = useState<GitState | null>(null)
   const [config, setConfig] = useState<Config | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem('pk-sidebar-width')) || 280)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('pk-sidebar-collapsed') === '1')
+  const [panelCollapsed, setPanelCollapsed] = useState(() => localStorage.getItem('pk-doc-panel-collapsed') === '1')
   const resizing = useRef(false)
   const docApiRef = useRef<DocApi | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
+
+  const toggleSidebar = useCallback(() => setSidebarCollapsed((c) => !c), [])
+
+  useEffect(() => {
+    localStorage.setItem('pk-sidebar-collapsed', sidebarCollapsed ? '1' : '0')
+  }, [sidebarCollapsed])
 
   const refresh = useCallback(async () => {
     const [t, q, inbox, g, meta, jobs] = await Promise.all([api.tree(), api.queue(), api.inbox(), api.gitStatus(), api.meta(), api.aiJobs()])
@@ -80,7 +88,7 @@ export default function App() {
       const target = e.target as HTMLElement
       const isTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable
       if (isTyping) return
-      const ctx = { view, setView, openDoc, refresh, docApi: docApiRef.current ?? undefined }
+      const ctx = { view, setView, openDoc, refresh, docApi: docApiRef.current ?? undefined, toggleSidebar }
       for (const cmd of buildCommands(ctx)) {
         if (!cmd.keys || !matchesShortcut(cmd.keys, e)) continue
         if (cmd.when && !cmd.when(ctx)) continue
@@ -91,7 +99,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [view, refresh, openDoc, paletteOpen])
+  }, [view, refresh, openDoc, paletteOpen, toggleSidebar])
 
   // sidebar resize by dragging the right edge
   useEffect(() => {
@@ -129,41 +137,61 @@ export default function App() {
 
   return (
     <div className="app">
-      <Sidebar
-        tree={tree}
-        queue={queue}
-        view={view}
-        inboxCount={inboxCount}
-        aiRunningCount={aiRunningCount}
-        git={git}
-        config={config}
-        width={sidebarWidth}
-        setView={setView}
-        openDoc={openDoc}
-        refresh={refresh}
-      />
-      <div
-        className="resize-handle"
-        onMouseDown={() => {
-          resizing.current = true
-          document.body.classList.add('resizing')
-        }}
-      />
+      {!sidebarCollapsed && (
+        <>
+          <Sidebar
+            tree={tree}
+            queue={queue}
+            view={view}
+            inboxCount={inboxCount}
+            aiRunningCount={aiRunningCount}
+            git={git}
+            config={config}
+            width={sidebarWidth}
+            setView={setView}
+            openDoc={openDoc}
+            refresh={refresh}
+          />
+          <div
+            className="resize-handle"
+            onMouseDown={() => {
+              resizing.current = true
+              document.body.classList.add('resizing')
+            }}
+          />
+        </>
+      )}
       <div className="content">
         <header className="topbar">
-          <nav className="breadcrumb">
-            {crumb.map((part, i) => (
-              <span key={i} className="crumb-part">
-                {i > 0 && <span className="crumb-sep">/</span>}
-                {part}
-              </span>
-            ))}
-          </nav>
-          <Tooltip label="Search or run a command" keys="⌘K">
-            <button className="icon-btn topbar-btn" onClick={() => setPaletteOpen(true)}>
-              <SearchIcon />
-            </button>
-          </Tooltip>
+          <div className="topbar-group">
+            <Tooltip label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'} keys="[">
+              <button className="icon-btn topbar-btn" onClick={toggleSidebar}>
+                <PanelLeftIcon />
+              </button>
+            </Tooltip>
+            <nav className="breadcrumb">
+              {crumb.map((part, i) => (
+                <span key={i} className="crumb-part">
+                  {i > 0 && <span className="crumb-sep">/</span>}
+                  {part}
+                </span>
+              ))}
+            </nav>
+          </div>
+          <div className="topbar-group">
+            {view.kind === 'doc' && (
+              <Tooltip label={panelCollapsed ? 'Show panel' : 'Hide panel'} keys="]">
+                <button className={`icon-btn topbar-btn${panelCollapsed ? ' active' : ''}`} onClick={() => docApiRef.current?.togglePanel()}>
+                  <PanelRightIcon />
+                </button>
+              </Tooltip>
+            )}
+            <Tooltip label="Search or run a command" keys="⌘K">
+              <button className="icon-btn topbar-btn" onClick={() => setPaletteOpen(true)}>
+                <SearchIcon />
+              </button>
+            </Tooltip>
+          </div>
         </header>
         <main className={`main${view.kind === 'doc' ? ' main-doc' : ''}`}>
           {view.kind === 'doc' && (
@@ -176,6 +204,7 @@ export default function App() {
               onMoved={openDoc}
               onDocApi={(api) => { docApiRef.current = api }}
               onOpenActivity={() => setView({ kind: 'activity' })}
+              onPanelCollapsedChange={setPanelCollapsed}
             />
           )}
           {view.kind === 'queue' && <QueueView openDoc={openDoc} refresh={refresh} />}
@@ -194,6 +223,7 @@ export default function App() {
         openDoc={openDoc}
         refresh={refresh}
         docApi={docApiRef.current}
+        toggleSidebar={toggleSidebar}
       />
       <DialogHost />
     </div>
@@ -205,6 +235,24 @@ function SearchIcon() {
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
       <circle cx="7" cy="7" r="4.5" />
       <path d="M10.5 10.5L14 14" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function PanelLeftIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
+      <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
+      <rect x="1.5" y="2.5" width="4.5" height="11" rx="1" fill="currentColor" fillOpacity="0.3" stroke="none" />
+    </svg>
+  )
+}
+
+function PanelRightIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
+      <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
+      <rect x="10" y="2.5" width="4.5" height="11" rx="1" fill="currentColor" fillOpacity="0.3" stroke="none" />
     </svg>
   )
 }

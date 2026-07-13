@@ -243,6 +243,29 @@ export function folderStats(rel: string): { docs: number } {
   return { docs }
 }
 
+/** Remove leftover move-safety symlinks: broken ones regardless of age, others once older than maxAgeDays. */
+export function cleanStaleLinks(maxAgeDays = 7): number {
+  const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000
+  let removed = 0
+  const walk = (dir: string) => {
+    if (!fs.existsSync(dir)) return
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, entry.name)
+      if (entry.isSymbolicLink()) {
+        const broken = !fs.existsSync(abs)
+        if (broken || fs.lstatSync(abs).mtimeMs < cutoff) {
+          fs.rmSync(abs)
+          removed++
+        }
+        continue
+      }
+      if (entry.isDirectory() && !EXCLUDED_DIRS.has(entry.name)) walk(abs)
+    }
+  }
+  walk(vaultRoot())
+  return removed
+}
+
 export function guessType(filename: string): DocType {
   const n = filename.toLowerCase()
   if (n.includes('plan')) return 'plan'
@@ -269,7 +292,10 @@ export interface ImportResult {
 }
 
 /** Import an external markdown file into the vault (copy or move). */
-export function importFile(sourceAbs: string, opts: { folder?: string; mode?: 'copy' | 'move'; project?: string }): ImportResult {
+export function importFile(
+  sourceAbs: string,
+  opts: { folder?: string; mode?: 'copy' | 'move'; project?: string; leaveLink?: boolean },
+): ImportResult {
   const src = expandTilde(sourceAbs)
   if (CLAUDE_MEMORY_RE.test(src)) {
     throw new Error('Claude memory files cannot be imported — browse them in the Memories section')
@@ -296,6 +322,17 @@ export function importFile(sourceAbs: string, opts: { folder?: string; mode?: 'c
   if (mode === 'move') {
     fs.rmSync(src)
     removedSource = true
+    if (opts.leaveLink && !fs.existsSync(src)) {
+      const destAbs = safePath(rel)
+      try {
+        // realpath the containing dir first: on macOS /tmp is itself a symlink to /private/tmp,
+        // and a relative target computed from the un-resolved dir would resolve to the wrong place.
+        const realDir = fs.realpathSync(path.dirname(src))
+        fs.symlinkSync(path.relative(realDir, destAbs), src)
+      } catch {
+        // best-effort — importing succeeded regardless
+      }
+    }
   }
   return { path: rel, removedSource }
 }

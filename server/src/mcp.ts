@@ -64,9 +64,10 @@ export async function runMcp(): Promise<void> {
       folder: z.string().optional(),
       mode: z.enum(['copy', 'move']).optional(),
       project: z.string().optional(),
+      leaveLink: z.boolean().optional().describe('When mode is move, leave a symlink at the original location pointing into the vault (default false)'),
     },
-    async ({ sourcePath, folder, mode, project }) => {
-      const result = vault.importFile(sourcePath, { folder, mode, project })
+    async ({ sourcePath, folder, mode, project, leaveLink }) => {
+      const result = vault.importFile(sourcePath, { folder, mode, project, leaveLink })
       inbox.setStatus(sourcePath, 'imported')
       await gitops.commitAll(`import: ${result.path}`)
       return text(result)

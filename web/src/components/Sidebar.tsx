@@ -4,6 +4,7 @@ import type { View } from '../App'
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu'
 import { dialog } from './Dialog'
 import { Tooltip } from './Tooltip'
+import { activityWarning } from '../moveGuard'
 
 const TYPE_ICONS: Record<string, string> = {
   plan: '◫',
@@ -109,13 +110,34 @@ export function Sidebar(props: SidebarProps) {
     e.dataTransfer.effectAllowed = 'move'
   }
 
+  const destOf = (from: string, folder: string) => (folder ? `${folder}/${from.split('/').pop()}` : from.split('/').pop()!)
+
   const moveInternal = async (paths: string[], folder: string) => {
-    for (const from of paths) {
-      const to = folder ? `${folder}/${from.split('/').pop()}` : from.split('/').pop()!
-      if (to !== from) await api.move(from, to)
+    const changed = paths.filter((from) => destOf(from, folder) !== from)
+    if (changed.length === 0) return
+    const warnings = (await Promise.all(changed.map((p) => activityWarning({ path: p })))).filter((w): w is string => !!w)
+    const warning =
+      warnings.length === 0
+        ? undefined
+        : warnings.length === 1
+          ? warnings[0]
+          : `${warnings.length} of these documents were written to recently by a Claude session — moving them will break that session's path references.`
+    const res = await dialog.confirmOption({
+      title: changed.length > 1 ? `Move ${changed.length} documents` : 'Move document',
+      body: `Move to ${folder || 'vault root'}?`,
+      warning,
+      confirmLabel: 'Move',
+      checkboxLabel: changed.length > 1 ? 'Leave symlinks at the old locations' : 'Leave a symlink at the old location',
+      checkboxInitial: true,
+    })
+    if (!res.ok) return
+    try {
+      for (const from of changed) await api.move(from, destOf(from, folder), res.checked)
+      setSelected(new Set())
+      await refresh()
+    } catch (e) {
+      window.alert((e as Error).message)
     }
-    setSelected(new Set())
-    await refresh()
   }
 
   /**
@@ -151,46 +173,69 @@ export function Sidebar(props: SidebarProps) {
   const confirmDeleteFolder = async (path: string) => {
     const { docs } = await api.folderStats(path)
     const name = path.split('/').pop()!
+    const warning = await activityWarning({ folder: path })
     if (docs > 0) {
       const ok = await dialog.confirmTyped({
         title: 'Delete folder',
         body: `This deletes "${path}" and its ${docs} document(s). Type the folder name to confirm.`,
+        warning,
         mustType: name,
         danger: true,
       })
       if (!ok) return
     } else {
-      const ok = await dialog.confirm({ title: 'Delete empty folder?', body: `"${path}"`, danger: true, confirmLabel: 'Delete' })
+      const ok = await dialog.confirm({ title: 'Delete empty folder?', body: `"${path}"`, warning, danger: true, confirmLabel: 'Delete' })
       if (!ok) return
     }
-    await api.deleteFolder(path)
-    await refresh()
+    try {
+      await api.deleteFolder(path)
+      await refresh()
+    } catch (e) {
+      window.alert((e as Error).message)
+    }
   }
 
   const deleteSingleDoc = async (path: string) => {
     const ok = await dialog.confirm({
       title: 'Delete document?',
       body: `${path} — history stays in vault git.`,
+      warning: await activityWarning({ path }),
       danger: true,
       confirmLabel: 'Delete',
     })
     if (ok) {
-      await api.deleteDoc(path)
-      await refresh()
+      try {
+        await api.deleteDoc(path)
+        await refresh()
+      } catch (e) {
+        window.alert((e as Error).message)
+      }
     }
   }
 
   const deleteMultipleDocs = async (paths: string[]) => {
+    const warnings = (await Promise.all(paths.map((p) => activityWarning({ path: p })))).filter((w): w is string => !!w)
+    const warning =
+      warnings.length === 0
+        ? undefined
+        : warnings.length === 1
+          ? warnings[0]
+          : `${warnings.length} of these documents were written to recently by a Claude session — deleting them will break that session's path references.`
     const ok = await dialog.confirm({
       title: `Delete ${paths.length} documents?`,
       body: 'History stays in vault git.',
+      warning,
       danger: true,
       confirmLabel: 'Delete',
     })
     if (!ok) return
-    for (const p of paths) await api.deleteDoc(p)
-    setSelected(new Set())
-    await refresh()
+    try {
+      for (const p of paths) await api.deleteDoc(p)
+      setSelected(new Set())
+      await refresh()
+    } catch (e) {
+      window.alert((e as Error).message)
+    }
   }
 
   const docMenu = (path: string): MenuItem[] => {
@@ -213,8 +258,23 @@ export function Sidebar(props: SidebarProps) {
       { label: 'Add to Up Next', onClick: () => api.queueAdd(path).then(refresh) },
       { separator: true },
       { label: 'Rename / Move…', onClick: async () => {
-        const to = await dialog.prompt({ title: 'Move / rename', label: 'New vault-relative path', initial: path })
-        if (to && to !== path) { await api.move(path, to); await refresh(); openDoc(to) }
+        const res = await dialog.promptOption({
+          title: 'Move / rename',
+          label: 'New vault-relative path',
+          initial: path,
+          warning: await activityWarning({ path }),
+          checkboxLabel: 'Leave a symlink at the old location',
+          checkboxInitial: true,
+        })
+        if (res && res.value && res.value !== path) {
+          try {
+            await api.move(path, res.value, res.checked)
+            await refresh()
+            openDoc(res.value)
+          } catch (e) {
+            window.alert((e as Error).message)
+          }
+        }
       } },
       { label: 'Copy path', hint: 'vault', onClick: () => navigator.clipboard.writeText(path) },
       { label: 'Copy absolute path', onClick: () => navigator.clipboard.writeText(absOf(path)) },
@@ -231,10 +291,24 @@ export function Sidebar(props: SidebarProps) {
     } },
     { label: 'Rename…', onClick: async () => {
       const name = await dialog.prompt({ title: 'Rename folder', label: 'New folder name', initial: path.split('/').pop() })
-      if (name?.trim()) {
-        const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
-        const to = parent ? `${parent}/${name.trim()}` : name.trim()
-        if (to !== path) { await api.renameFolder(path, to); await refresh() }
+      if (!name?.trim()) return
+      const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
+      const to = parent ? `${parent}/${name.trim()}` : name.trim()
+      if (to === path) return
+      const res = await dialog.confirmOption({
+        title: 'Rename folder',
+        body: `"${path}" → "${to}"`,
+        warning: await activityWarning({ folder: path }),
+        confirmLabel: 'Rename',
+        checkboxLabel: 'Leave a symlink at the old location',
+        checkboxInitial: true,
+      })
+      if (!res.ok) return
+      try {
+        await api.renameFolder(path, to, res.checked)
+        await refresh()
+      } catch (e) {
+        window.alert((e as Error).message)
       }
     } },
     { separator: true },
