@@ -43,7 +43,15 @@ export function buildApp(): Hono {
   api.get('/doc', (c) => {
     const rel = c.req.query('path') ?? ''
     const doc = vault.readDoc(rel)
-    return c.json({ path: rel, absPath: vault.safePath(rel), ...doc })
+    const abs = vault.safePath(rel)
+    const record = activity.lastClaudeWrite(abs)
+    return c.json({
+      path: rel,
+      absPath: abs,
+      ...doc,
+      mtime: fs.statSync(abs).mtimeMs,
+      claudeActivity: record ? { at: record.at, sessionId: record.sessionId, cwd: record.cwd } : undefined,
+    })
   })
   api.put('/doc', async (c) => {
     const { path: rel, content, body } = await c.req.json()

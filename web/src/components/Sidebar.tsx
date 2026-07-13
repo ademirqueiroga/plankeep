@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, type Config, type DocSummary, type GitState, type TreeNode } from '../api'
+import { api, type ClaudeActivity, type Config, type DocSummary, type GitState, type TreeNode } from '../api'
 import type { View } from '../App'
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu'
 import { dialog } from './Dialog'
 import { Tooltip } from './Tooltip'
 import { activityWarning } from '../moveGuard'
+import { ago } from './ActivityView'
 
 const TYPE_ICONS: Record<string, string> = {
   plan: '◫',
@@ -441,6 +442,7 @@ export function Sidebar(props: SidebarProps) {
           title={child.path}
         >
           <span className="doc-glyph">{TYPE_ICONS[child.doc!.meta.type] ?? '≡'}</span>
+          {child.doc!.meta.status === 'active' && <ActiveDot activity={child.doc!.claudeActivity} />}
           <span className="row-label">{child.doc!.title}</span>
           {child.doc!.progress.total > 0 && (
             <span className={`row-progress${child.doc!.progress.done === child.doc!.progress.total ? ' done' : ''}`}>
@@ -486,6 +488,7 @@ export function Sidebar(props: SidebarProps) {
                 title={d.path}
               >
                 <span className="queue-mini-pos">{i + 1}</span>
+                {d.meta.status === 'active' && <ActiveDot activity={d.claudeActivity} />}
                 <span className="row-label">{d.title}</span>
                 {d.progress.total > 0 && (
                   <span className="mini-bar">
@@ -564,5 +567,15 @@ export function Sidebar(props: SidebarProps) {
 
       {menu && <ContextMenu menu={menu} onClose={() => setMenu(null)} />}
     </aside>
+  )
+}
+
+function ActiveDot({ activity }: { activity?: ClaudeActivity }) {
+  const live = !!activity && Date.now() - Date.parse(activity.at) < 60 * 60 * 1000
+  const label = live ? `Active — Claude session working on it ${ago(activity!.at)}` : 'Active'
+  return (
+    <Tooltip label={label}>
+      <span className={`active-dot${live ? ' live' : ''}`} />
+    </Tooltip>
   )
 }

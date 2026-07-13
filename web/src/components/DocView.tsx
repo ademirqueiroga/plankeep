@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { api, type AiJob, type Config, type FullDoc } from '../api'
+import { api, type AiJob, type ClaudeActivity, type Config, type FullDoc } from '../api'
 import { CopyBtn } from './CopyBtn'
 import { dialog } from './Dialog'
 import { Tooltip } from './Tooltip'
@@ -327,6 +327,10 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
             <span className={`status-pill s-${doc.meta.status}`}>{doc.meta.status}</span>
             <span className="type-label">{doc.meta.type}</span>
             {doc.meta.source?.project && <span className="type-label">from {doc.meta.source.project}</span>}
+            <span className="type-label" title={new Date(doc.mtime).toLocaleString()}>
+              edited {ago(new Date(doc.mtime).toISOString())}
+            </span>
+            {doc.claudeActivity && <ClaudeActivityBadge activity={doc.claudeActivity} />}
           </div>
         </div>
 
@@ -460,6 +464,35 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
       </aside>
       )}
     </div>
+  )
+}
+
+function ClaudeActivityBadge({ activity }: { activity: ClaudeActivity }) {
+  const [copied, setCopied] = useState(false)
+  const live = Date.now() - Date.parse(activity.at) < 60 * 60 * 1000
+
+  if (!activity.sessionId) {
+    return <span className="type-label">· Claude write {ago(activity.at)}</span>
+  }
+
+  const badge = (
+    <span
+      className="type-label session-badge"
+      onClick={() => {
+        navigator.clipboard.writeText(activity.sessionId!)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1200)
+      }}
+    >
+      {live && <span className="active-dot live" />}
+      {copied ? 'copied ✓' : `· Claude session ${activity.sessionId.slice(0, 8)} ${ago(activity.at)}`}
+    </span>
+  )
+
+  return (
+    <Tooltip label={`Session ${activity.sessionId}${activity.cwd ? ` · ${activity.cwd}` : ''} — click to copy id`}>
+      {badge}
+    </Tooltip>
   )
 }
 

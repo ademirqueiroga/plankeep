@@ -3,6 +3,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import matter from 'gray-matter'
 import { expandTilde, loadConfig } from './config.js'
+import { getActivityMap, type ActivityRecord } from './activity.js'
 
 export type DocType = 'plan' | 'findings' | 'exploration' | 'research' | 'note'
 export type DocStatus = 'draft' | 'active' | 'done' | 'archived'
@@ -23,6 +24,7 @@ export interface DocSummary {
   meta: DocMeta
   progress: { done: number; total: number }
   mtime: number
+  claudeActivity?: { at: string; sessionId?: string; cwd?: string }
 }
 
 export interface TreeNode {
@@ -148,18 +150,22 @@ export function updateMeta(rel: string, patch: Partial<Pick<DocMeta, 'type' | 's
   return meta
 }
 
-export function summarize(rel: string): DocSummary {
+export function summarize(rel: string, activityMap?: Record<string, ActivityRecord>): DocSummary {
   const doc = readDoc(rel)
+  const abs = safePath(rel)
+  const record = (activityMap ?? getActivityMap())[abs]
   return {
     path: rel,
     title: doc.title,
     meta: doc.meta,
     progress: checkboxProgress(doc.body),
-    mtime: fs.statSync(safePath(rel)).mtimeMs,
+    mtime: fs.statSync(abs).mtimeMs,
+    claudeActivity: record ? { at: record.at, sessionId: record.sessionId, cwd: record.cwd } : undefined,
   }
 }
 
 export function listDocs(): DocSummary[] {
+  const activityMap = getActivityMap()
   const out: DocSummary[] = []
   const walk = (dir: string) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -168,7 +174,7 @@ export function listDocs(): DocSummary[] {
       } else if (entry.name.endsWith('.md')) {
         const rel = path.relative(vaultRoot(), path.join(dir, entry.name))
         try {
-          out.push(summarize(rel))
+          out.push(summarize(rel, activityMap))
         } catch {
           // unreadable file — skip
         }
@@ -180,6 +186,7 @@ export function listDocs(): DocSummary[] {
 }
 
 export function tree(): TreeNode {
+  const activityMap = getActivityMap()
   const build = (dir: string, rel: string): TreeNode => {
     const node: TreeNode = { name: rel === '' ? '/' : path.basename(dir), path: rel, kind: 'folder', children: [] }
     if (!fs.existsSync(dir)) return node
@@ -192,7 +199,7 @@ export function tree(): TreeNode {
     for (const d of docs) {
       const drel = rel ? `${rel}/${d.name}` : d.name
       try {
-        node.children!.push({ name: d.name, path: drel, kind: 'doc', doc: summarize(drel) })
+        node.children!.push({ name: d.name, path: drel, kind: 'doc', doc: summarize(drel, activityMap) })
       } catch {
         // skip unreadable
       }

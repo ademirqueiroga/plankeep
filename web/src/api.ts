@@ -11,12 +11,19 @@ export interface DocMeta {
   updated?: string
 }
 
+export interface ClaudeActivity {
+  at: string
+  sessionId?: string
+  cwd?: string
+}
+
 export interface DocSummary {
   path: string
   title: string
   meta: DocMeta
   progress: { done: number; total: number }
   mtime: number
+  claudeActivity?: ClaudeActivity
 }
 
 export interface TreeNode {
@@ -34,6 +41,8 @@ export interface FullDoc {
   body: string
   meta: DocMeta
   title: string
+  mtime: number
+  claudeActivity?: ClaudeActivity
 }
 
 export interface InboxItem {
@@ -145,7 +154,9 @@ export const api = {
   folderStats: (path: string) => request<{ docs: number }>(`/api/folders/stats?path=${encodeURIComponent(path)}`),
   activity: (q: { path?: string; folder?: string; abs?: string }) => {
     const params = new URLSearchParams(q as Record<string, string>)
-    return request<{ lastClaudeWrite: string | null; path?: string }>(`/api/activity?${params.toString()}`)
+    return request<{ lastClaudeWrite: string | null; sessionId?: string; cwd?: string; tool?: string; path?: string }>(
+      `/api/activity?${params.toString()}`,
+    )
   },
   reveal: (opts: { path?: string; absPath?: string }) => post('/api/reveal', opts),
   resolveSource: (name: string) => request<Array<{ path: string; project: string }>>(`/api/resolve-source?name=${encodeURIComponent(name)}`),
