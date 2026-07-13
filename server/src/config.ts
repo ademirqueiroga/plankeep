@@ -104,3 +104,10 @@ export function vaultPath(): string {
 export function allVaultRoots(): string[] {
   return loadConfig().vaults.map((v) => expandTilde(v.path))
 }
+
+/** Resolve a registered vault's expanded root path by name. Throws if the name is unknown. */
+export function vaultRootByName(name: string): string {
+  const entry = loadConfig().vaults.find((v) => v.name === name)
+  if (!entry) throw new Error(`No vault named "${name}"`)
+  return expandTilde(entry.path)
+}

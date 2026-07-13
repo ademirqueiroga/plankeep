@@ -44,9 +44,8 @@ export function vaultRoot(): string {
   return vaultPath()
 }
 
-/** Resolve a vault-relative path, refusing traversal outside the vault. */
-export function safePath(rel: string): string {
-  const root = vaultRoot()
+/** Resolve a vault-relative path, refusing traversal outside the vault. `root` defaults to the active vault. */
+export function safePath(rel: string, root: string = vaultRoot()): string {
   const abs = path.resolve(root, rel)
   if (abs !== root && !abs.startsWith(root + path.sep)) {
     throw new Error(`Path escapes vault: ${rel}`)
@@ -82,8 +81,8 @@ export function titleOf(content: string, fallback: string): string {
   return h1 ? h1[1].trim() : fallback
 }
 
-export function readDoc(rel: string): { content: string; body: string; meta: DocMeta; title: string } {
-  const raw = fs.readFileSync(safePath(rel), 'utf8')
+export function readDoc(rel: string, root: string = vaultRoot()): { content: string; body: string; meta: DocMeta; title: string } {
+  const raw = fs.readFileSync(safePath(rel, root), 'utf8')
   const parsed = matter(raw)
   const meta = normalizeMeta(parsed.data?.plankeep)
   return {
@@ -95,8 +94,8 @@ export function readDoc(rel: string): { content: string; body: string; meta: Doc
 }
 
 /** Write a doc, merging the plankeep metadata block into existing front-matter. */
-export function writeDoc(rel: string, body: string, meta: DocMeta, extraFrontmatter?: Record<string, unknown>): void {
-  const abs = safePath(rel)
+export function writeDoc(rel: string, body: string, meta: DocMeta, extraFrontmatter?: Record<string, unknown>, root: string = vaultRoot()): void {
+  const abs = safePath(rel, root)
   fs.mkdirSync(path.dirname(abs), { recursive: true })
   meta.updated = new Date().toISOString()
   const data = { ...(extraFrontmatter ?? {}), plankeep: JSON.parse(JSON.stringify(meta)) }
@@ -109,17 +108,17 @@ export function writeDoc(rel: string, body: string, meta: DocMeta, extraFrontmat
  * anything the incoming content doesn't specify (e.g. no front-matter at all) keeps the doc's
  * existing id/type/status/tags/source/imported rather than resetting to defaults.
  */
-export function saveRawDoc(rel: string, content: string): void {
+export function saveRawDoc(rel: string, content: string, root: string = vaultRoot()): void {
   const parsed = matter(content)
   const extra = { ...parsed.data }
   delete extra.plankeep
 
-  const abs = safePath(rel)
+  const abs = safePath(rel, root)
   const meta = fs.existsSync(abs)
-    ? { ...readDoc(rel).meta, ...(parsed.data?.plankeep ?? {}) }
+    ? { ...readDoc(rel, root).meta, ...(parsed.data?.plankeep ?? {}) }
     : normalizeMeta(parsed.data?.plankeep)
 
-  writeDoc(rel, parsed.content, meta, extra)
+  writeDoc(rel, parsed.content, meta, extra, root)
 }
 
 /** Replace only the markdown body, keeping front-matter/metadata intact. */
@@ -132,27 +131,27 @@ export function updateBody(rel: string, body: string): void {
 }
 
 /** Returns the new status if checkbox completion implies a change, else null. */
-export function autoStatusFor(rel: string): DocStatus | null {
-  const { body, meta } = readDoc(rel)
+export function autoStatusFor(rel: string, root: string = vaultRoot()): DocStatus | null {
+  const { body, meta } = readDoc(rel, root)
   const { done, total } = checkboxProgress(body)
   if (total > 0 && done === total && meta.status !== 'done' && meta.status !== 'archived') return 'done'
   if (meta.status === 'done' && total > 0 && done < total) return 'active'
   return null
 }
 
-export function updateMeta(rel: string, patch: Partial<Pick<DocMeta, 'type' | 'status' | 'tags'>>): DocMeta {
-  const doc = readDoc(rel)
+export function updateMeta(rel: string, patch: Partial<Pick<DocMeta, 'type' | 'status' | 'tags'>>, root: string = vaultRoot()): DocMeta {
+  const doc = readDoc(rel, root)
   const parsed = matter(doc.content)
   const extra = { ...parsed.data }
   delete extra.plankeep
   const meta = { ...doc.meta, ...patch }
-  writeDoc(rel, parsed.content, meta, extra)
+  writeDoc(rel, parsed.content, meta, extra, root)
   return meta
 }
 
-export function summarize(rel: string, activityMap?: Record<string, ActivityRecord>): DocSummary {
-  const doc = readDoc(rel)
-  const abs = safePath(rel)
+export function summarize(rel: string, activityMap?: Record<string, ActivityRecord>, root: string = vaultRoot()): DocSummary {
+  const doc = readDoc(rel, root)
+  const abs = safePath(rel, root)
   const record = (activityMap ?? getActivityMap())[abs]
   return {
     path: rel,
@@ -164,7 +163,7 @@ export function summarize(rel: string, activityMap?: Record<string, ActivityReco
   }
 }
 
-export function listDocs(): DocSummary[] {
+export function listDocs(root: string = vaultRoot()): DocSummary[] {
   const activityMap = getActivityMap()
   const out: DocSummary[] = []
   const walk = (dir: string) => {
@@ -172,16 +171,16 @@ export function listDocs(): DocSummary[] {
       if (entry.isDirectory()) {
         if (!EXCLUDED_DIRS.has(entry.name)) walk(path.join(dir, entry.name))
       } else if (entry.name.endsWith('.md')) {
-        const rel = path.relative(vaultRoot(), path.join(dir, entry.name))
+        const rel = path.relative(root, path.join(dir, entry.name))
         try {
-          out.push(summarize(rel, activityMap))
+          out.push(summarize(rel, activityMap, root))
         } catch {
           // unreadable file — skip
         }
       }
     }
   }
-  if (fs.existsSync(vaultRoot())) walk(vaultRoot())
+  if (fs.existsSync(root)) walk(root)
   return out
 }
 
@@ -282,10 +281,10 @@ export function guessType(filename: string): DocType {
   return 'note'
 }
 
-function uniqueDest(folder: string, filename: string): string {
+function uniqueDest(folder: string, filename: string, root: string = vaultRoot()): string {
   let rel = folder ? `${folder}/${filename}` : filename
   let i = 2
-  while (fs.existsSync(safePath(rel))) {
+  while (fs.existsSync(safePath(rel, root))) {
     const base = filename.replace(/\.md$/, '')
     rel = folder ? `${folder}/${base}-${i}.md` : `${base}-${i}.md`
     i++
@@ -345,10 +344,15 @@ export function importFile(
 }
 
 /** Import in-memory content (e.g. browser drag-drop, MCP save). */
-export function importContent(name: string, content: string, opts: { folder?: string; type?: DocType; project?: string }): string {
+export function importContent(
+  name: string,
+  content: string,
+  opts: { folder?: string; type?: DocType; project?: string },
+  root: string = vaultRoot(),
+): string {
   const filename = name.endsWith('.md') ? name : `${name}.md`
   const folder = (opts.folder ?? '').replace(/^\/+|\/+$/g, '')
-  const rel = uniqueDest(folder, path.basename(filename))
+  const rel = uniqueDest(folder, path.basename(filename), root)
   const parsed = matter(content)
   const meta = normalizeMeta(parsed.data?.plankeep)
   meta.type = opts.type ?? guessType(filename)
@@ -356,7 +360,7 @@ export function importContent(name: string, content: string, opts: { folder?: st
   meta.imported = new Date().toISOString()
   const extra = { ...parsed.data }
   delete extra.plankeep
-  writeDoc(rel, parsed.content, meta, extra)
+  writeDoc(rel, parsed.content, meta, extra, root)
   return rel
 }
 
@@ -367,11 +371,11 @@ export interface SearchHit {
   snippets: string[]
 }
 
-export function search(query: string): SearchHit[] {
+export function search(query: string, root: string = vaultRoot()): SearchHit[] {
   const q = query.toLowerCase()
   const hits: SearchHit[] = []
-  for (const doc of listDocs()) {
-    const { body, title, meta } = readDoc(doc.path)
+  for (const doc of listDocs(root)) {
+    const { body, title, meta } = readDoc(doc.path, root)
     const snippets: string[] = []
     const lines = body.split('\n')
     for (let i = 0; i < lines.length && snippets.length < 4; i++) {

@@ -6,8 +6,11 @@ import * as gitops from './gitops.js'
 import * as queue from './queue.js'
 import * as inbox from './inbox.js'
 import * as scanner from './scanner.js'
+import { vaultRootByName } from './config.js'
 
 const text = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] })
+
+const VAULT_PARAM_DESC = 'Name of a registered vault to use instead of the active one (see the user\'s vault registry). Omit to use whichever vault is active in the UI.'
 
 export async function runMcp(): Promise<void> {
   await gitops.ensureVaultRepo()
@@ -16,17 +19,21 @@ export async function runMcp(): Promise<void> {
   server.tool(
     'list_documents',
     'List all documents in the PlanKeep vault (plans, findings, exploration/research notes) with metadata, checkbox progress and vault-relative paths.',
-    {},
-    async () => text(vault.listDocs()),
+    { vault: z.string().optional().describe(VAULT_PARAM_DESC) },
+    async ({ vault: vaultName }) => text(vault.listDocs(vaultName ? vaultRootByName(vaultName) : undefined)),
   )
 
   server.tool(
     'get_document',
     'Read one vault document by its vault-relative path. Returns full markdown content, metadata and absolute path.',
-    { path: z.string().describe('Vault-relative path, e.g. "my-app/feature-plan.md"') },
-    async ({ path: rel }) => {
-      const doc = vault.readDoc(rel)
-      return text({ path: rel, absPath: vault.safePath(rel), ...doc })
+    {
+      path: z.string().describe('Vault-relative path, e.g. "my-app/feature-plan.md"'),
+      vault: z.string().optional().describe(VAULT_PARAM_DESC),
+    },
+    async ({ path: rel, vault: vaultName }) => {
+      const root = vaultName ? vaultRootByName(vaultName) : undefined
+      const doc = vault.readDoc(rel, root)
+      return text({ path: rel, absPath: vault.safePath(rel, root), ...doc })
     },
   )
 
@@ -39,20 +46,22 @@ export async function runMcp(): Promise<void> {
       folder: z.string().optional().describe('Vault folder, usually the related project name, e.g. "my-app"'),
       type: z.enum(['plan', 'findings', 'exploration', 'research', 'note']).optional(),
       overwritePath: z.string().optional().describe('If updating an existing doc, its current vault-relative path'),
+      vault: z.string().optional().describe(VAULT_PARAM_DESC),
     },
-    async ({ name, content, folder, type, overwritePath }) => {
+    async ({ name, content, folder, type, overwritePath, vault: vaultName }) => {
+      const root = vaultName ? vaultRootByName(vaultName) : undefined
       let rel: string
       if (overwritePath) {
-        vault.saveRawDoc(overwritePath, content)
+        vault.saveRawDoc(overwritePath, content, root)
         rel = overwritePath
-        if (type) vault.updateMeta(rel, { type })
+        if (type) vault.updateMeta(rel, { type }, root)
       } else {
-        rel = vault.importContent(name, content, { folder, type, project: folder })
+        rel = vault.importContent(name, content, { folder, type, project: folder }, root)
       }
-      const autoStatus = vault.autoStatusFor(rel)
-      if (autoStatus) vault.updateMeta(rel, { status: autoStatus })
+      const autoStatus = vault.autoStatusFor(rel, root)
+      if (autoStatus) vault.updateMeta(rel, { status: autoStatus }, root)
       await gitops.commitAll(`mcp save: ${rel}${autoStatus ? ` (auto-status: ${autoStatus})` : ''}`)
-      return text({ path: rel, absPath: vault.safePath(rel) })
+      return text({ path: rel, absPath: vault.safePath(rel, root) })
     },
   )
 
@@ -77,8 +86,8 @@ export async function runMcp(): Promise<void> {
   server.tool(
     'search_documents',
     'Full-text search across the vault (titles, paths, tags, content). Returns matching docs with snippets.',
-    { query: z.string() },
-    async ({ query }) => text(vault.search(query)),
+    { query: z.string(), vault: z.string().optional().describe(VAULT_PARAM_DESC) },
+    async ({ query, vault: vaultName }) => text(vault.search(query, vaultName ? vaultRootByName(vaultName) : undefined)),
   )
 
   server.tool(
