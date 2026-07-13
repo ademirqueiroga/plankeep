@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, type AiJob, type Config, type DocSummary, type GitState, type TreeNode } from './api'
+import { api, type AiJob, type Config, type DocSummary, type GitState, type TreeNode, type VaultEntry } from './api'
 import { Sidebar } from './components/Sidebar'
 import { DocView } from './components/DocView'
 import { QueueView } from './components/QueueView'
@@ -40,6 +40,9 @@ export default function App() {
   const [aiJobs, setAiJobs] = useState<AiJob[]>([])
   const [git, setGit] = useState<GitState | null>(null)
   const [config, setConfig] = useState<Config | null>(null)
+  const [vaultPath, setVaultPath] = useState<string>('')
+  const [vaults, setVaults] = useState<VaultEntry[]>([])
+  const [activeVault, setActiveVault] = useState<string>('')
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem('pk-sidebar-width')) || 280)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('pk-sidebar-collapsed') === '1')
   const [panelCollapsed, setPanelCollapsed] = useState(() => localStorage.getItem('pk-doc-panel-collapsed') === '1')
@@ -60,6 +63,9 @@ export default function App() {
     setInboxCount(inbox.length)
     setGit(g)
     setConfig(meta.config)
+    setVaultPath(meta.vaultPath)
+    setVaults(meta.vaults)
+    setActiveVault(meta.activeVault)
     setAiJobs(jobs)
   }, [])
 
@@ -70,6 +76,16 @@ export default function App() {
   }, [refresh])
 
   const openDoc = useCallback((path: string) => setView({ kind: 'doc', path }), [])
+
+  const switchVault = useCallback(
+    async (name: string) => {
+      await api.setActiveVault(name)
+      setView((v) => (v.kind === 'doc' ? { kind: 'queue' } : v))
+      setTree(null)
+      await refresh()
+    },
+    [refresh],
+  )
 
   // global shortcuts: ⌘K/Ctrl+K and ⌥Space toggle the command palette,
   // single-key document shortcuts dispatch through the shared command list.
@@ -88,7 +104,7 @@ export default function App() {
       const target = e.target as HTMLElement
       const isTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable
       if (isTyping) return
-      const ctx = { view, setView, openDoc, refresh, docApi: docApiRef.current ?? undefined, toggleSidebar }
+      const ctx = { view, setView, openDoc, refresh, docApi: docApiRef.current ?? undefined, toggleSidebar, vaults, activeVault, switchVault }
       for (const cmd of buildCommands(ctx)) {
         if (!cmd.keys || !matchesShortcut(cmd.keys, e)) continue
         if (cmd.when && !cmd.when(ctx)) continue
@@ -99,7 +115,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [view, refresh, openDoc, paletteOpen, toggleSidebar])
+  }, [view, refresh, openDoc, paletteOpen, toggleSidebar, vaults, activeVault, switchVault])
 
   // sidebar resize by dragging the right edge
   useEffect(() => {
@@ -146,11 +162,14 @@ export default function App() {
             inboxCount={inboxCount}
             aiRunningCount={aiRunningCount}
             git={git}
-            config={config}
+            vaultPath={vaultPath}
+            vaults={vaults}
+            activeVault={activeVault}
             width={sidebarWidth}
             setView={setView}
             openDoc={openDoc}
             refresh={refresh}
+            switchVault={switchVault}
           />
           <div
             className="resize-handle"
@@ -224,6 +243,9 @@ export default function App() {
         refresh={refresh}
         docApi={docApiRef.current}
         toggleSidebar={toggleSidebar}
+        vaults={vaults}
+        activeVault={activeVault}
+        switchVault={switchVault}
       />
       <DialogHost />
     </div>

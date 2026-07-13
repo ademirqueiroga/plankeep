@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, type ClaudeActivity, type Config, type DocSummary, type GitState, type TreeNode } from '../api'
+import { api, type ClaudeActivity, type DocSummary, type GitState, type TreeNode, type VaultEntry } from '../api'
 import type { View } from '../App'
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu'
 import { dialog } from './Dialog'
 import { Tooltip } from './Tooltip'
+import { PickerMenu } from './PickerMenu'
 import { activityWarning } from '../moveGuard'
 import { ago } from './ActivityView'
+import { addVaultFlow } from '../vaultActions'
 
 const TYPE_ICONS: Record<string, string> = {
   plan: '◫',
@@ -22,15 +24,18 @@ interface SidebarProps {
   inboxCount: number
   aiRunningCount: number
   git: GitState | null
-  config: Config | null
+  vaultPath: string
+  vaults: VaultEntry[]
+  activeVault: string
   width: number
   setView: (v: View) => void
   openDoc: (path: string) => void
   refresh: () => Promise<void>
+  switchVault: (name: string) => Promise<void>
 }
 
 export function Sidebar(props: SidebarProps) {
-  const { tree, queue, view, inboxCount, aiRunningCount, git, config, width, setView, openDoc, refresh } = props
+  const { tree, queue, view, inboxCount, aiRunningCount, git, vaultPath, vaults, activeVault, width, setView, openDoc, refresh, switchVault } = props
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [lastClicked, setLastClicked] = useState<string | null>(null)
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({})
@@ -38,8 +43,10 @@ export function Sidebar(props: SidebarProps) {
   const [treeDropOver, setTreeDropOver] = useState(false)
   const [dropTarget, setDropTarget] = useState<string | null>(null)
   const [focusedPath, setFocusedPath] = useState<string | null>(null)
+  const [vaultMenuOpen, setVaultMenuOpen] = useState(false)
   const dragDepth = useRef(0)
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const brandRef = useRef<HTMLButtonElement>(null)
 
   // an aborted drag (Esc) fires no drop/dragleave on our elements — clear any stuck highlight
   useEffect(() => {
@@ -81,7 +88,7 @@ export function Sidebar(props: SidebarProps) {
     return out
   }, [tree, isOpen])
 
-  const absOf = (rel: string) => (config ? `${config.vaultPath}/${rel}` : rel)
+  const absOf = (rel: string) => (vaultPath ? `${vaultPath}/${rel}` : rel)
 
   // ----- selection -----
   const handleDocClick = (path: string, e: React.MouseEvent) => {
@@ -327,6 +334,22 @@ export function Sidebar(props: SidebarProps) {
     { label: 'Scan for plans', onClick: async () => { await api.scan(); await refresh() } },
   ]
 
+  // ----- vault switcher -----
+  const vaultMenuOptions = [
+    ...vaults.map((v) => ({ value: v.name, label: v.name })),
+    { value: '__add__', label: '+ Add vault…' },
+    { value: '__manage__', label: 'Manage vaults…' },
+  ]
+
+  const onVaultMenuSelect = async (value: string) => {
+    if (value === '__add__') {
+      if (await addVaultFlow()) await refresh()
+      return
+    }
+    if (value === '__manage__') return setView({ kind: 'settings' })
+    if (value !== activeVault) await switchVault(value)
+  }
+
   const showMenu = (e: React.MouseEvent, items: MenuItem[]) => {
     e.preventDefault()
     e.stopPropagation()
@@ -455,7 +478,18 @@ export function Sidebar(props: SidebarProps) {
 
   return (
     <aside className="sidebar" style={{ width }}>
-      <div className="brand">PlanKeep</div>
+      <button ref={brandRef} className="brand brand-switcher" onClick={() => setVaultMenuOpen((o) => !o)}>
+        PlanKeep <span className="brand-vault">· {activeVault}</span> <span className="brand-chevron">▾</span>
+      </button>
+      {vaultMenuOpen && (
+        <PickerMenu
+          anchorRef={brandRef}
+          options={vaultMenuOptions}
+          current={activeVault}
+          onSelect={onVaultMenuSelect}
+          onClose={() => setVaultMenuOpen(false)}
+        />
+      )}
 
       <nav className="nav">
         <button className={`nav-item${view.kind === 'inbox' ? ' active' : ''}`} onClick={() => setView({ kind: 'inbox' })}>

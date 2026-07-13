@@ -1,5 +1,5 @@
 import type { View } from './App'
-import { api } from './api'
+import { api, type VaultEntry } from './api'
 import { dialog } from './components/Dialog'
 
 const AI_ACTIONS = [
@@ -32,6 +32,9 @@ export interface Ctx {
   refresh: () => Promise<void>
   docApi?: DocApi
   toggleSidebar: () => void
+  vaults?: VaultEntry[]
+  activeVault?: string
+  switchVault?: (name: string) => Promise<void>
 }
 
 export interface Command {
@@ -62,6 +65,14 @@ export function buildCommands(ctx: Ctx): Command[] {
     { id: 'go-memories', title: 'Go to Memories', group: 'Navigate', run: (c) => c.setView({ kind: 'memories' }) },
     { id: 'go-search', title: 'Go to Search view', group: 'Navigate', run: (c) => c.setView({ kind: 'search' }) },
     { id: 'go-settings', title: 'Go to Settings', group: 'Navigate', run: (c) => c.setView({ kind: 'settings' }) },
+    ...(ctx.vaults ?? [])
+      .filter((v) => v.name !== ctx.activeVault)
+      .map((v): Command => ({
+        id: `switch-vault-${v.name}`,
+        title: `Switch vault: ${v.name}`,
+        group: 'Navigate',
+        run: (c) => c.switchVault?.(v.name),
+      })),
   ]
 
   const document: Command[] = [

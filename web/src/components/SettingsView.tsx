@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { api, type Config, type GitState, type McpInfo } from '../api'
+import { api, type Config, type GitState, type McpInfo, type VaultEntry } from '../api'
 import { CopyBtn } from './CopyBtn'
 import { ShortcutsModal } from './ShortcutsModal'
+import { dialog } from './Dialog'
+import { addVaultFlow } from '../vaultActions'
 
 const MCP_TOOLS = [
   'list_documents', 'get_document', 'save_document', 'import_file',
@@ -10,7 +12,8 @@ const MCP_TOOLS = [
 
 export function SettingsView({ refresh }: { refresh: () => Promise<void> }) {
   const [config, setConfig] = useState<Config | null>(null)
-  const [vaultPath, setVaultPath] = useState('')
+  const [vaults, setVaults] = useState<VaultEntry[]>([])
+  const [activeVault, setActiveVault] = useState('')
   const [mcp, setMcp] = useState<McpInfo | null>(null)
   const [git, setGit] = useState<GitState | null>(null)
   const [log, setLog] = useState<Array<{ hash: string; date: string; message: string }>>([])
@@ -27,7 +30,8 @@ export function SettingsView({ refresh }: { refresh: () => Promise<void> }) {
   const load = async () => {
     const meta = await api.meta()
     setConfig(meta.config)
-    setVaultPath(meta.vaultPath)
+    setVaults(meta.vaults)
+    setActiveVault(meta.activeVault)
     setMcp(meta.mcp)
     setGit(await api.gitStatus())
     setLog(await api.gitLog())
@@ -44,6 +48,58 @@ export function SettingsView({ refresh }: { refresh: () => Promise<void> }) {
     await api.saveSettings(next)
     setMsg('Settings saved.')
     await refresh()
+  }
+
+  const addVault = async () => {
+    if (await addVaultFlow()) {
+      await load()
+      await refresh()
+    }
+  }
+
+  const switchTo = async (name: string) => {
+    await api.setActiveVault(name)
+    await load()
+    await refresh()
+  }
+
+  const renameVault = async (v: VaultEntry) => {
+    const name = await dialog.prompt({ title: 'Rename vault', label: 'Vault name', initial: v.name })
+    if (!name?.trim() || name.trim() === v.name) return
+    try {
+      await api.patchVault(v.name, { name: name.trim() })
+      await load()
+      await refresh()
+    } catch (e) {
+      window.alert((e as Error).message)
+    }
+  }
+
+  const removeVault = async (v: VaultEntry) => {
+    const ok = await dialog.confirm({
+      title: 'Remove vault',
+      body: `Deregister "${v.name}" from PlanKeep. Files stay on disk at ${v.path} — this only removes it from the registry.`,
+      confirmLabel: 'Remove',
+      danger: true,
+    })
+    if (!ok) return
+    try {
+      await api.removeVault(v.name)
+      await load()
+      await refresh()
+    } catch (e) {
+      window.alert((e as Error).message)
+    }
+  }
+
+  const patchVaultField = async (v: VaultEntry, patch: { remote?: string; autoPush?: boolean }) => {
+    try {
+      await api.patchVault(v.name, patch)
+      await load()
+      if (v.name === activeVault) await refresh()
+    } catch (e) {
+      window.alert((e as Error).message)
+    }
   }
 
   const sync = async () => {
@@ -82,10 +138,51 @@ export function SettingsView({ refresh }: { refresh: () => Promise<void> }) {
       {msg && <div className="banner">{msg} <button className="icon-btn" onClick={() => setMsg(null)}>✕</button></div>}
 
       <section>
-        <h2>Vault</h2>
-        <div className="field">
-          <label>Location</label>
-          <span className="path-chip">{vaultPath}<CopyBtn value={vaultPath} /></span>
+        <h2>Vaults</h2>
+        <div className="vault-list">
+          {vaults.map((v) => (
+            <div key={v.name} className="vault-row">
+              <div className="vault-row-head">
+                <button className="vault-name-btn" onClick={() => renameVault(v)} title="Rename">
+                  {v.name}
+                </button>
+                {v.name === activeVault && <span className="active-badge">Active</span>}
+                <div className="vault-row-actions">
+                  {v.name !== activeVault && <button onClick={() => switchTo(v.name)}>Switch to</button>}
+                  <button
+                    className="danger"
+                    disabled={v.name === activeVault || vaults.length <= 1}
+                    title={v.name === activeVault ? 'Switch to another vault first' : vaults.length <= 1 ? 'Cannot remove the last vault' : undefined}
+                    onClick={() => removeVault(v)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+              <span className="path-chip">{v.path}<CopyBtn value={v.path} /></span>
+              <div className="field">
+                <label>Remote URL</label>
+                <input
+                  defaultValue={v.remote ?? ''}
+                  placeholder="git@github.com:you/plans-vault.git"
+                  onBlur={(e) => e.target.value !== (v.remote ?? '') && patchVaultField(v, { remote: e.target.value })}
+                />
+              </div>
+              <div className="field">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={!!v.autoPush}
+                    onChange={(e) => patchVaultField(v, { autoPush: e.target.checked })}
+                  />
+                  Auto-push after commits (requires remote)
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="field row">
+          <button onClick={addVault}>+ Add vault…</button>
         </div>
         <div className="field">
           <label>Default import mode</label>
@@ -105,7 +202,7 @@ export function SettingsView({ refresh }: { refresh: () => Promise<void> }) {
       </section>
 
       <section>
-        <h2>Git backup & sync</h2>
+        <h2>Git backup & sync <span className="hint-inline">(active vault: {activeVault})</span></h2>
         {git && (
           <p className="hint">
             branch <b>{git.branch || '—'}</b> · {git.dirty} uncommitted · ↑{git.ahead} ↓{git.behind}
@@ -114,23 +211,9 @@ export function SettingsView({ refresh }: { refresh: () => Promise<void> }) {
           </p>
         )}
         <div className="field">
-          <label>Remote URL</label>
-          <input
-            defaultValue={config.git.remote}
-            placeholder="git@github.com:you/plans-vault.git"
-            onBlur={(e) => e.target.value !== config.git.remote && save({ git: { ...config.git, remote: e.target.value } })}
-          />
-        </div>
-        <div className="field">
           <label>
             <input type="checkbox" checked={config.git.autoCommit} onChange={(e) => save({ git: { ...config.git, autoCommit: e.target.checked } })} />
             Auto-commit every change (recommended — this is the backup/history mechanism)
-          </label>
-        </div>
-        <div className="field">
-          <label>
-            <input type="checkbox" checked={config.git.autoPush} onChange={(e) => save({ git: { ...config.git, autoPush: e.target.checked } })} />
-            Auto-push after commits (requires remote)
           </label>
         </div>
         <div className="field row">

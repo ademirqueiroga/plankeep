@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { api, type SearchHit } from '../api'
+import { api, type SearchHit, type VaultEntry } from '../api'
 import type { View } from '../App'
 import { buildCommands, type DocApi } from '../shortcuts'
 
@@ -23,9 +23,12 @@ interface PaletteProps {
   refresh: () => Promise<void>
   docApi: DocApi | null
   toggleSidebar: () => void
+  vaults: VaultEntry[]
+  activeVault: string
+  switchVault: (name: string) => Promise<void>
 }
 
-export function Palette({ open, onClose, view, setView, openDoc, refresh, docApi, toggleSidebar }: PaletteProps) {
+export function Palette({ open, onClose, view, setView, openDoc, refresh, docApi, toggleSidebar, vaults, activeVault, switchVault }: PaletteProps) {
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<SearchHit[]>([])
   const [highlight, setHighlight] = useState(0)
@@ -42,8 +45,8 @@ export function Palette({ open, onClose, view, setView, openDoc, refresh, docApi
   }, [open])
 
   const ctx = useMemo(
-    () => ({ view, setView, openDoc, refresh, docApi: docApi ?? undefined, toggleSidebar }),
-    [view, setView, openDoc, refresh, docApi, toggleSidebar],
+    () => ({ view, setView, openDoc, refresh, docApi: docApi ?? undefined, toggleSidebar, vaults, activeVault, switchVault }),
+    [view, setView, openDoc, refresh, docApi, toggleSidebar, vaults, activeVault, switchVault],
   )
 
   const commands = useMemo(
