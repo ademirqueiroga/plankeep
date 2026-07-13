@@ -3,7 +3,7 @@ import path from 'node:path'
 import { isCandidateFile, projectOf } from './scanner.js'
 import { addCandidate } from './inbox.js'
 import { recordClaudeWrite } from './activity.js'
-import { vaultRoot } from './vault.js'
+import { allVaultRoots } from './config.js'
 
 /**
  * Claude Code PostToolUse hook entrypoint. Reads the hook event JSON from
@@ -20,8 +20,8 @@ export async function runHook(): Promise<void> {
     if (!filePath || !fs.existsSync(filePath)) return
 
     if (filePath.endsWith('.md')) {
-      const vault = vaultRoot()
-      if (filePath === vault || filePath.startsWith(vault + path.sep)) {
+      const inVault = allVaultRoots().some((root) => filePath === root || filePath.startsWith(root + path.sep))
+      if (inVault) {
         recordClaudeWrite(filePath, { sessionId: event.session_id, cwd: event.cwd, tool: event.tool_name })
         return
       }

@@ -1,7 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { expandTilde, loadConfig } from './config.js'
-import { vaultRoot } from './vault.js'
+import { allVaultRoots, expandTilde, loadConfig } from './config.js'
 import { addCandidate } from './inbox.js'
 
 const EXCLUDED_NAMES = new Set([
@@ -39,8 +38,7 @@ export function isExcluded(abs: string): boolean {
 export function isCandidateFile(abs: string): boolean {
   if (!abs.endsWith('.md')) return false
   if (EXCLUDED_NAMES.has(path.basename(abs).toLowerCase())) return false
-  const vault = vaultRoot()
-  if (abs === vault || abs.startsWith(vault + path.sep)) return false
+  if (allVaultRoots().some((root) => abs === root || abs.startsWith(root + path.sep))) return false
   if (/\/(node_modules|\.git|\.idea|build|dist)\//.test(abs)) return false
   if (CLAUDE_MEMORY_RE.test(abs)) return false
   if (isExcluded(abs)) return false

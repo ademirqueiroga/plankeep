@@ -112,10 +112,18 @@ export interface MemoryDoc {
   absPath: string
 }
 
+export interface VaultEntry {
+  name: string
+  path: string
+  remote?: string
+  autoPush?: boolean
+}
+
 export interface Config {
-  vaultPath: string
+  vaults: VaultEntry[]
+  activeVault: string
   importMode: 'copy' | 'move'
-  git: { remote: string; autoCommit: boolean; autoPush: boolean }
+  git: { autoCommit: boolean }
   scanRoots: string[]
   excludePaths: string[]
   port: number
@@ -137,9 +145,23 @@ const post = <T,>(url: string, body: unknown): Promise<T> =>
   request<T>(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 const put = <T,>(url: string, body: unknown): Promise<T> =>
   request<T>(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+const patch = <T,>(url: string, body: unknown): Promise<T> =>
+  request<T>(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+const del = <T,>(url: string): Promise<T> => request<T>(url, { method: 'DELETE' })
+
+export interface VaultsResponse {
+  vaults: VaultEntry[]
+  active: string
+}
 
 export const api = {
-  meta: () => request<{ vaultPath: string; config: Config; mcp: McpInfo }>('/api/meta'),
+  meta: () => request<{ vaultPath: string; vaults: VaultEntry[]; activeVault: string; config: Config; mcp: McpInfo }>('/api/meta'),
+  vaults: () => request<VaultsResponse>('/api/vaults'),
+  addVault: (name: string, path: string, cloneUrl?: string) => post<VaultsResponse>('/api/vaults', { name, path, cloneUrl }),
+  setActiveVault: (name: string) => put<VaultsResponse>('/api/vaults/active', { name }),
+  removeVault: (name: string) => del<VaultsResponse>(`/api/vaults/${encodeURIComponent(name)}`),
+  patchVault: (name: string, body: { name?: string; remote?: string; autoPush?: boolean }) =>
+    patch<VaultsResponse>(`/api/vaults/${encodeURIComponent(name)}`, body),
   saveSettings: (config: Partial<Config>) => put<{ config: Config }>('/api/settings', config),
   tree: () => request<TreeNode>('/api/tree'),
   doc: (path: string) => request<FullDoc>(`/api/doc?path=${encodeURIComponent(path)}`),

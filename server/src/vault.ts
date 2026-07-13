@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import matter from 'gray-matter'
-import { expandTilde, loadConfig } from './config.js'
+import { expandTilde, loadConfig, vaultPath } from './config.js'
 import { getActivityMap, type ActivityRecord } from './activity.js'
 
 export type DocType = 'plan' | 'findings' | 'exploration' | 'research' | 'note'
@@ -41,7 +41,7 @@ const CHECKBOX_RE = /^\s*[-*+]\s+\[( |x|X)\]/gm
 const CLAUDE_MEMORY_RE = /\/\.claude\/projects\/[^/]+\/memory\//
 
 export function vaultRoot(): string {
-  return expandTilde(loadConfig().vaultPath)
+  return vaultPath()
 }
 
 /** Resolve a vault-relative path, refusing traversal outside the vault. */

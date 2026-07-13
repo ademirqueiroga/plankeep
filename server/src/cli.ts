@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { serve } from '@hono/node-server'
-import { loadConfig } from './config.js'
+import { activeVaultEntry, loadConfig } from './config.js'
 
 const command = process.argv[2] ?? 'serve'
 
@@ -8,12 +8,9 @@ async function main(): Promise<void> {
   switch (command) {
     case 'serve': {
       const { buildApp } = await import('./api.js')
-      const { ensureVaultRepo, commitAll } = await import('./gitops.js')
-      const { cleanStaleLinks } = await import('./vault.js')
+      const { onVaultActivated } = await import('./startup.js')
       const { sweepAutoActive } = await import('./autostatus.js')
-      await ensureVaultRepo()
-      const removed = cleanStaleLinks()
-      if (removed > 0) await commitAll(`cleanup: ${removed} stale link(s)`)
+      await onVaultActivated()
 
       let sweeping = false
       const runSweep = async () => {
@@ -32,7 +29,7 @@ async function main(): Promise<void> {
 
       const port = Number(process.argv[3] ?? loadConfig().port)
       serve({ fetch: buildApp().fetch, port })
-      console.log(`PlanKeep serving on http://localhost:${port} (vault: ${loadConfig().vaultPath})`)
+      console.log(`PlanKeep serving on http://localhost:${port} (vault: ${activeVaultEntry().path})`)
       break
     }
     case 'hook': {
@@ -54,7 +51,7 @@ async function main(): Promise<void> {
     case 'init': {
       const { ensureVaultRepo } = await import('./gitops.js')
       await ensureVaultRepo()
-      console.log(`Vault ready at ${loadConfig().vaultPath}`)
+      console.log(`Vault ready at ${activeVaultEntry().path}`)
       break
     }
     default:

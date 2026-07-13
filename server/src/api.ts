@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { Hono } from 'hono'
 import { serveStatic } from '@hono/node-server/serve-static'
-import { loadConfig, saveConfig } from './config.js'
+import { expandTilde, loadConfig, saveConfig, type VaultEntry } from './config.js'
 import * as vault from './vault.js'
 import * as gitops from './gitops.js'
 import * as queue from './queue.js'
@@ -13,6 +13,7 @@ import * as scanner from './scanner.js'
 import * as ai from './ai.js'
 import * as memories from './memories.js'
 import * as activity from './activity.js'
+import { onVaultActivated } from './startup.js'
 
 export function buildApp(): Hono {
   const app = new Hono()
@@ -23,9 +24,12 @@ export function buildApp(): Hono {
   // ----- meta / settings -----
   api.get('/meta', (c) => {
     const cliPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'cli.js')
+    const config = loadConfig()
     return c.json({
       vaultPath: vault.vaultRoot(),
-      config: loadConfig(),
+      vaults: config.vaults,
+      activeVault: config.activeVault,
+      config,
       mcp: { node: process.execPath, cliPath: fs.existsSync(cliPath) ? cliPath : null },
     })
   })
@@ -33,8 +37,77 @@ export function buildApp(): Hono {
     const body = await c.req.json()
     const config = { ...loadConfig(), ...body, git: { ...loadConfig().git, ...(body.git ?? {}) } }
     saveConfig(config)
-    if (body.git?.remote) await gitops.setRemote(body.git.remote)
     return c.json({ config })
+  })
+
+  // ----- vault registry -----
+  api.get('/vaults', (c) => {
+    const config = loadConfig()
+    return c.json({ vaults: config.vaults, active: config.activeVault })
+  })
+  api.post('/vaults', async (c) => {
+    const { name, path: rawPath, cloneUrl } = await c.req.json()
+    if (typeof name !== 'string' || !name.trim()) return c.json({ error: 'Vault name is required' }, 400)
+    if (typeof rawPath !== 'string' || !rawPath.trim()) return c.json({ error: 'Vault path is required' }, 400)
+    const config = loadConfig()
+    if (config.vaults.some((v) => v.name === name)) return c.json({ error: `A vault named "${name}" already exists` }, 400)
+    const target = expandTilde(rawPath.trim())
+    for (const v of config.vaults) {
+      const existing = expandTilde(v.path)
+      if (target === existing || target.startsWith(existing + path.sep) || existing.startsWith(target + path.sep)) {
+        return c.json({ error: `Path overlaps existing vault "${v.name}" (${existing})` }, 400)
+      }
+    }
+    try {
+      if (cloneUrl && !fs.existsSync(target)) {
+        await gitops.cloneRepo(cloneUrl, target)
+        await gitops.initRepoAt(target)
+      } else {
+        await gitops.initRepoAt(target)
+      }
+    } catch (e) {
+      return c.json({ error: `git clone failed: ${(e as Error).message}` }, 400)
+    }
+    const entry: VaultEntry = { name: name.trim(), path: rawPath.trim() }
+    config.vaults.push(entry)
+    saveConfig(config)
+    return c.json({ vaults: config.vaults, active: config.activeVault })
+  })
+  api.put('/vaults/active', async (c) => {
+    const { name } = await c.req.json()
+    const config = loadConfig()
+    if (!config.vaults.some((v) => v.name === name)) return c.json({ error: `No vault named "${name}"` }, 400)
+    config.activeVault = name
+    saveConfig(config)
+    await onVaultActivated()
+    return c.json({ vaults: config.vaults, active: config.activeVault })
+  })
+  api.delete('/vaults/:name', (c) => {
+    const name = c.req.param('name')
+    const config = loadConfig()
+    if (config.activeVault === name) return c.json({ error: 'Switch to another vault before removing this one' }, 400)
+    if (config.vaults.length <= 1) return c.json({ error: 'Cannot remove the last vault' }, 400)
+    if (!config.vaults.some((v) => v.name === name)) return c.json({ error: `No vault named "${name}"` }, 400)
+    config.vaults = config.vaults.filter((v) => v.name !== name)
+    saveConfig(config)
+    return c.json({ vaults: config.vaults, active: config.activeVault })
+  })
+  api.patch('/vaults/:name', async (c) => {
+    const name = c.req.param('name')
+    const patch = await c.req.json()
+    const config = loadConfig()
+    const entry = config.vaults.find((v) => v.name === name)
+    if (!entry) return c.json({ error: `No vault named "${name}"` }, 400)
+    if (typeof patch.name === 'string' && patch.name.trim() && patch.name !== entry.name) {
+      if (config.vaults.some((v) => v.name === patch.name)) return c.json({ error: `A vault named "${patch.name}" already exists` }, 400)
+      if (config.activeVault === entry.name) config.activeVault = patch.name
+      entry.name = patch.name.trim()
+    }
+    if (typeof patch.remote === 'string') entry.remote = patch.remote || undefined
+    if (typeof patch.autoPush === 'boolean') entry.autoPush = patch.autoPush
+    saveConfig(config)
+    if (typeof patch.remote === 'string' && config.activeVault === entry.name) await gitops.setRemote(patch.remote)
+    return c.json({ vaults: config.vaults, active: config.activeVault })
   })
 
   // ----- tree & docs -----

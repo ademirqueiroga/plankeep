@@ -3,7 +3,7 @@ import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { simpleGit, type SimpleGit } from 'simple-git'
-import { loadConfig, saveConfig } from './config.js'
+import { activeVaultEntry, loadConfig, saveConfig } from './config.js'
 import { vaultRoot } from './vault.js'
 
 const execFileP = promisify(execFile)
@@ -13,10 +13,15 @@ function git(): SimpleGit {
 }
 
 export async function ensureVaultRepo(): Promise<void> {
-  const root = vaultRoot()
+  await initRepoAt(vaultRoot())
+}
+
+/** Init-or-adopt a git repo at an arbitrary path — used both for the active vault and when registering a new one. */
+export async function initRepoAt(root: string): Promise<void> {
   fs.mkdirSync(root, { recursive: true })
+  const g = simpleGit({ baseDir: root })
   if (!fs.existsSync(path.join(root, '.git'))) {
-    await git().init(['-b', 'main'])
+    await g.init(['-b', 'main'])
   }
   const pk = path.join(root, '.plankeep')
   fs.mkdirSync(pk, { recursive: true })
@@ -28,8 +33,18 @@ export async function ensureVaultRepo(): Promise<void> {
       path.join(root, 'README.md'),
       '# Plans Vault\n\nManaged by [PlanKeep](https://github.com/ademirqueiroga). Plain markdown files organized in folders; metadata lives in each file\'s front-matter under the `plankeep:` key. The "up next" queue is `.plankeep/queue.yaml`.\n',
     )
-    await commitAll('vault: initial structure')
+    const status = await g.status()
+    if (status.files.length > 0) {
+      await g.add(['-A'])
+      await g.commit('vault: initial structure')
+    }
   }
+}
+
+/** Clone an existing vault (e.g. a shared team vault) to a local path. */
+export async function cloneRepo(url: string, dest: string): Promise<void> {
+  fs.mkdirSync(path.dirname(dest), { recursive: true })
+  await simpleGit().clone(url, dest)
 }
 
 /** Commit everything in the vault. No-op when the tree is clean or autoCommit is off. */
@@ -41,7 +56,8 @@ export async function commitAll(message: string): Promise<boolean> {
   if (status.files.length === 0) return false
   await g.add(['-A'])
   await g.commit(message)
-  if (config.git.autoPush && config.git.remote) {
+  const entry = activeVaultEntry()
+  if (entry.autoPush && entry.remote) {
     pushSilently()
   }
   return true
@@ -103,7 +119,8 @@ export async function setRemote(url: string): Promise<void> {
     await g.addRemote('origin', url)
   }
   const config = loadConfig()
-  config.git.remote = url
+  const entry = config.vaults.find((v) => v.name === config.activeVault) ?? config.vaults[0]
+  entry.remote = url
   saveConfig(config)
 }
 
