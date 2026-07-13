@@ -10,9 +10,26 @@ async function main(): Promise<void> {
       const { buildApp } = await import('./api.js')
       const { ensureVaultRepo, commitAll } = await import('./gitops.js')
       const { cleanStaleLinks } = await import('./vault.js')
+      const { sweepAutoActive } = await import('./autostatus.js')
       await ensureVaultRepo()
       const removed = cleanStaleLinks()
       if (removed > 0) await commitAll(`cleanup: ${removed} stale link(s)`)
+
+      let sweeping = false
+      const runSweep = async () => {
+        if (sweeping) return
+        sweeping = true
+        try {
+          await sweepAutoActive()
+        } catch (e) {
+          console.error('auto-active sweep failed:', e)
+        } finally {
+          sweeping = false
+        }
+      }
+      await runSweep()
+      setInterval(runSweep, 60_000)
+
       const port = Number(process.argv[3] ?? loadConfig().port)
       serve({ fetch: buildApp().fetch, port })
       console.log(`PlanKeep serving on http://localhost:${port} (vault: ${loadConfig().vaultPath})`)
