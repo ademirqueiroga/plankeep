@@ -60,8 +60,8 @@ export function buildApp(): Hono {
     }
     try {
       if (cloneUrl && !fs.existsSync(target)) {
+        // freshly cloned from a remote — already in sync with collaborators, don't re-scaffold/commit over it
         await gitops.cloneRepo(cloneUrl, target)
-        await gitops.initRepoAt(target)
       } else {
         await gitops.initRepoAt(target)
       }
