@@ -22,7 +22,7 @@ export async function runHook(): Promise<void> {
     if (filePath.endsWith('.md')) {
       const vault = vaultRoot()
       if (filePath === vault || filePath.startsWith(vault + path.sep)) {
-        recordClaudeWrite(filePath)
+        recordClaudeWrite(filePath, { sessionId: event.session_id, cwd: event.cwd, tool: event.tool_name })
         return
       }
     }

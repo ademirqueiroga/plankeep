@@ -118,16 +118,23 @@ export function buildApp(): Hono {
   api.get('/folders/stats', (c) => c.json(vault.folderStats(c.req.query('path') ?? '')))
 
   // ----- Claude activity (presence sensor for move safety) -----
+  const activityResponse = (record: activity.ActivityRecord | null, extra?: { path?: string }) => ({
+    lastClaudeWrite: record?.at ?? null,
+    sessionId: record?.sessionId,
+    cwd: record?.cwd,
+    tool: record?.tool,
+    ...extra,
+  })
   api.get('/activity', (c) => {
     const rel = c.req.query('path')
     const folder = c.req.query('folder')
     const abs = c.req.query('abs')
-    if (abs) return c.json({ lastClaudeWrite: activity.lastClaudeWrite(abs) })
+    if (abs) return c.json(activityResponse(activity.lastClaudeWrite(abs)))
     if (folder !== undefined) {
       const hit = activity.lastClaudeWriteUnder(vault.safePath(folder))
-      return c.json({ lastClaudeWrite: hit?.at ?? null, path: hit ? path.relative(vault.vaultRoot(), hit.path) : undefined })
+      return c.json(activityResponse(hit?.record ?? null, { path: hit ? path.relative(vault.vaultRoot(), hit.path) : undefined }))
     }
-    return c.json({ lastClaudeWrite: activity.lastClaudeWrite(vault.safePath(rel ?? '')) })
+    return c.json(activityResponse(activity.lastClaudeWrite(vault.safePath(rel ?? ''))))
   })
 
   // ----- desktop niceties (server runs on the user's machine) -----
