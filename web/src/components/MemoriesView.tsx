@@ -27,6 +27,18 @@ export function MemoriesView({ view, setView }: MemoriesViewProps) {
     api.memories().then(setProjects)
   }, [])
 
+  // hash-restored memory views carry placeholder displayName/title (slug/file) — fill in the real labels once the project list loads
+  useEffect(() => {
+    if (view.kind !== 'memory' || projects.length === 0) return
+    if (view.displayName !== view.slug || view.title !== view.file) return
+    const project = projects.find((p) => p.slug === view.slug)
+    const file = project?.files.find((f) => f.file === view.file)
+    if (project && file && (project.displayName !== view.displayName || file.title !== view.title)) {
+      setView({ ...view, displayName: project.displayName, title: file.title })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, projects])
+
   if (view.kind === 'memory') {
     return <MemoryDetail view={view} projects={projects} setView={setView} />
   }

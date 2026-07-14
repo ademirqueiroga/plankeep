@@ -12,6 +12,7 @@ import { DialogHost, dialog } from './components/Dialog'
 import { Tooltip } from './components/Tooltip'
 import { Palette } from './components/Palette'
 import { buildCommands, matchesShortcut, type DocApi } from './shortcuts'
+import { hashToView, viewToHash } from './routing'
 
 export type View =
   | { kind: 'doc'; path: string }
@@ -33,7 +34,8 @@ const VIEW_TITLES: Record<string, string> = {
 }
 
 export default function App() {
-  const [view, setView] = useState<View>({ kind: 'queue' })
+  const [view, setView] = useState<View>(() => hashToView(location.hash) ?? { kind: 'queue' })
+  const navigatingFromHash = useRef(false)
   const [tree, setTree] = useState<TreeNode | null>(null)
   const [queue, setQueue] = useState<DocSummary[]>([])
   const [inboxCount, setInboxCount] = useState(0)
@@ -55,6 +57,26 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('pk-sidebar-collapsed', sidebarCollapsed ? '1' : '0')
   }, [sidebarCollapsed])
+
+  // URL hash mirrors the current view: refresh-proof, back/forward, shareable deep links.
+  useEffect(() => {
+    if (navigatingFromHash.current) return
+    const hash = viewToHash(view)
+    if (hash !== location.hash) location.hash = hash
+  }, [view])
+
+  useEffect(() => {
+    const onHashChange = () => {
+      if (viewToHash(view) === location.hash) return
+      const parsed = hashToView(location.hash)
+      navigatingFromHash.current = true
+      setView(parsed ?? { kind: 'queue' })
+      navigatingFromHash.current = false
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view])
 
   const refresh = useCallback(async () => {
     const [t, q, inbox, g, meta, jobs] = await Promise.all([api.tree(), api.queue(), api.inbox(), api.gitStatus(), api.meta(), api.aiJobs()])
