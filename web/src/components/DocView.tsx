@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { api, type AiJob, type ClaudeActivity, type Config, type FullDoc } from '../api'
+import { api, type AiJob, type ClaudeActivity, type Config, type DocMeta, type FullDoc } from '../api'
 import { CopyBtn } from './CopyBtn'
 import { dialog } from './Dialog'
 import { Tooltip } from './Tooltip'
@@ -326,7 +326,7 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
           <div className="doc-subtitle">
             <span className={`status-pill s-${doc.meta.status}`}>{doc.meta.status}</span>
             <span className="type-label">{doc.meta.type}</span>
-            {doc.meta.source?.project && <span className="type-label">from {doc.meta.source.project}</span>}
+            <ProvenanceLabel meta={doc.meta} />
             <span className="type-label" title={new Date(doc.mtime).toLocaleString()}>
               edited {ago(new Date(doc.mtime).toISOString())}
             </span>
@@ -465,6 +465,31 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
       )}
     </div>
   )
+}
+
+function ProvenanceLabel({ meta }: { meta: DocMeta }) {
+  const { source, imported } = meta
+  let text: string
+  if (source?.mode && source.project) {
+    text = `${source.mode === 'move' ? 'moved' : 'copied'} from ${source.project}${imported ? ` · ${ago(imported)}` : ''}`
+  } else if (source?.project) {
+    text = `from ${source.project}${imported ? ` · ${ago(imported)}` : ''}`
+  } else if (imported) {
+    text = `created ${ago(imported)}`
+  } else {
+    return null
+  }
+
+  const tooltip = source?.path
+    ? `${source.path}${imported ? ` — ${new Date(imported).toLocaleString()}` : ''}`
+    : imported
+      ? new Date(imported).toLocaleString()
+      : undefined
+
+  const label = (
+    <span className="type-label provenance-label">{text}</span>
+  )
+  return tooltip ? <Tooltip label={tooltip}>{label}</Tooltip> : label
 }
 
 function ClaudeActivityBadge({ activity }: { activity: ClaudeActivity }) {

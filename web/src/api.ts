@@ -6,7 +6,7 @@ export interface DocMeta {
   type: DocType
   status: DocStatus
   tags: string[]
-  source?: { project?: string; path?: string }
+  source?: { project?: string; path?: string; mode?: 'copy' | 'move' }
   imported?: string
   updated?: string
 }

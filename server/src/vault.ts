@@ -13,7 +13,7 @@ export interface DocMeta {
   type: DocType
   status: DocStatus
   tags: string[]
-  source?: { project?: string; path?: string }
+  source?: { project?: string; path?: string; mode?: 'copy' | 'move' }
   imported?: string
   updated?: string
 }
@@ -317,7 +317,7 @@ export function importFile(
     ...existing,
     type: parsed.data?.plankeep?.type ?? guessType(path.basename(src)),
     status: existing.status,
-    source: { project: opts.project, path: src },
+    source: { project: opts.project, path: src, mode },
     imported: new Date().toISOString(),
   }
   const extra = { ...parsed.data }
