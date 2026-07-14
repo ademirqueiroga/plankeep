@@ -61,6 +61,8 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [pickerOpen, setPickerOpen] = useState<'status' | 'type' | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const savingRef = useRef(false)
+  const pendingReloadOnExitRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const statusBtnRef = useRef<HTMLButtonElement>(null)
   const typeBtnRef = useRef<HTMLButtonElement>(null)
@@ -94,6 +96,36 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
       if (pollRef.current) clearInterval(pollRef.current)
     }
   }, [load, loadLastRun])
+
+  // re-check the file on disk so the doc updates without a manual refresh — the whole reason people used to hit ⌘R
+  const maybeReload = useCallback(async () => {
+    if (editing) {
+      pendingReloadOnExitRef.current = true // catch up once the editor closes, instead of clobbering it now
+      return
+    }
+    if (savingRef.current) return // in-flight checkbox/save — its own load() call will pick up the fresh mtime
+    const fresh = await api.doc(path)
+    setDoc((cur) => (cur && fresh.mtime === cur.mtime ? cur : fresh))
+  }, [path, editing])
+
+  const maybeReloadRef = useRef(maybeReload)
+  useEffect(() => {
+    maybeReloadRef.current = maybeReload
+  }, [maybeReload])
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void maybeReloadRef.current()
+    }
+    window.addEventListener('focus', onVisible)
+    document.addEventListener('visibilitychange', onVisible)
+    const interval = setInterval(() => void maybeReloadRef.current(), 15_000)
+    return () => {
+      window.removeEventListener('focus', onVisible)
+      document.removeEventListener('visibilitychange', onVisible)
+      clearInterval(interval)
+    }
+  }, [])
 
   useEffect(() => {
     localStorage.setItem('pk-outline-pinned', outlinePinned ? '1' : '0')
@@ -168,13 +200,18 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
     const body = toggleNthCheckbox(doc.body, n)
     const prevStatus = doc.meta.status
     setDoc({ ...doc, body })
-    const summary = await api.saveBody(path, body)
-    await load()
-    await refresh()
-    if (summary.meta.status !== prevStatus) {
-      setStatusMessage(
-        summary.meta.status === 'done' ? 'All tasks complete — status set to done.' : 'Task unchecked — status set back to active.',
-      )
+    savingRef.current = true
+    try {
+      const summary = await api.saveBody(path, body)
+      await load()
+      await refresh()
+      if (summary.meta.status !== prevStatus) {
+        setStatusMessage(
+          summary.meta.status === 'done' ? 'All tasks complete — status set to done.' : 'Task unchecked — status set back to active.',
+        )
+      }
+    } finally {
+      savingRef.current = false
     }
   }
 
@@ -254,21 +291,37 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
   }, [editing])
 
   const saveEdit = async () => {
-    await api.saveDoc(path, draft)
-    setEditing(false)
-    await load()
-    await refresh()
+    savingRef.current = true
+    try {
+      await api.saveDoc(path, draft)
+      setEditing(false)
+      await load()
+      await refresh()
+    } finally {
+      savingRef.current = false
+    }
+    pendingReloadOnExitRef.current = false
+  }
+
+  const catchUpAfterEdit = () => {
+    if (!pendingReloadOnExitRef.current) return
+    pendingReloadOnExitRef.current = false
+    load()
   }
 
   const exitEditRequest = useCallback(async () => {
     if (!doc) return
     if (draft === doc.content) {
       setEditing(false)
+      catchUpAfterEdit()
       return
     }
     const choice = await dialog.saveDiscard({ title: 'Unsaved changes', body: `Save your edits to ${doc.title}?` })
     if (choice === 'save') await saveEdit()
-    else if (choice === 'discard') setEditing(false)
+    else if (choice === 'discard') {
+      setEditing(false)
+      catchUpAfterEdit()
+    }
     // 'cancel' — stay in the editor
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc, draft, path])
