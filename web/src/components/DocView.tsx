@@ -31,6 +31,14 @@ function toggleNthCheckbox(body: string, n: number): string {
   })
 }
 
+function countUnchecked(body: string): number {
+  let n = 0
+  for (const m of body.matchAll(CHECKBOX_RE)) {
+    if (m[2].toLowerCase() !== 'x') n++
+  }
+  return n
+}
+
 interface DocViewProps {
   path: string
   config: Config | null
@@ -290,6 +298,17 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
   if (error) return <div className="empty-state">Could not open {path}: {error}</div>
   if (!doc) return <div className="empty-state">Loading…</div>
 
+  const jumpToCurrentStep = () => {
+    const boxes = articleRef.current?.querySelectorAll('input[type="checkbox"]')
+    const next = boxes && Array.from(boxes).find((b) => !(b as HTMLInputElement).checked)
+    const li = next?.closest('li')
+    if (!li) return
+    li.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    li.classList.add('step-flash')
+    setTimeout(() => li.classList.remove('step-flash'), 1600)
+  }
+  const showJumpButton = !editing && doc.meta.type === 'plan' && countUnchecked(doc.body) > 0
+
   let checkboxIndex = -1
 
   return (
@@ -463,7 +482,25 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
         </PanelGroup>
       </aside>
       )}
+
+      {showJumpButton && (
+        <Tooltip label="Jump to the first unchecked step">
+          <button className="jump-step-btn" onClick={jumpToCurrentStep}>
+            <JumpIcon />
+          </button>
+        </Tooltip>
+      )}
     </div>
+  )
+}
+
+function JumpIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="var(--brand)" strokeWidth="1.5">
+      <circle cx="8" cy="8" r="5.5" />
+      <circle cx="8" cy="8" r="1.4" fill="var(--brand)" stroke="none" />
+      <path d="M8 1v2.2M8 12.8V15M1 8h2.2M12.8 8H15" strokeLinecap="round" />
+    </svg>
   )
 }
 
