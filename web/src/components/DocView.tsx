@@ -163,14 +163,28 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
     setActiveHeadingId(items[0]?.id ?? null)
   }, [doc, editing])
 
-  // scroll-spy over the .doc-main scroll container
+  // scroll memory is per-tab-session (not localStorage): a plan reopened days later should start at the top,
+  // but a refresh mid-read shouldn't lose your place
+  const scrollRestoredRef = useRef(false)
   useEffect(() => {
-    if (outline.length === 0) return
+    if (scrollRestoredRef.current || editing || !doc) return
+    const container = articleRef.current?.closest('.doc-main') as HTMLElement | null
+    if (!container) return
+    scrollRestoredRef.current = true
+    const saved = sessionStorage.getItem(`pk-scroll:${path}`)
+    if (!saved) return
+    requestAnimationFrame(() => {
+      container.scrollTop = Number(saved)
+    })
+  }, [doc, editing, path])
+
+  // scroll-spy over the .doc-main scroll container, piggybacking the same listener to persist scroll position
+  useEffect(() => {
     const container = articleRef.current?.closest('.doc-main') as HTMLElement | null
     if (!container) return
     let ticking = false
-    const compute = () => {
-      ticking = false
+    const computeSpy = () => {
+      if (outline.length === 0) return
       const threshold = container.getBoundingClientRect().top + 96
       let current: string | null = outline[0]?.id ?? null
       for (const item of outline) {
@@ -184,12 +198,16 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
     const onScroll = () => {
       if (ticking) return
       ticking = true
-      requestAnimationFrame(compute)
+      requestAnimationFrame(() => {
+        ticking = false
+        computeSpy()
+        sessionStorage.setItem(`pk-scroll:${path}`, String(container.scrollTop))
+      })
     }
-    compute()
+    computeSpy() // establish the initial active heading only — no sessionStorage write until a real scroll happens
     container.addEventListener('scroll', onScroll)
     return () => container.removeEventListener('scroll', onScroll)
-  }, [outline])
+  }, [outline, path])
 
   const navigateToHeading = useCallback((id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
