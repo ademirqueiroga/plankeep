@@ -17,6 +17,16 @@ const TYPE_ICONS: Record<string, string> = {
   note: '≡',
 }
 
+const openFoldersKey = (vault: string) => `pk-open-folders:${vault}`
+
+function readOpenFolders(vault: string): Record<string, boolean> {
+  try {
+    return JSON.parse(localStorage.getItem(openFoldersKey(vault)) ?? '{}')
+  } catch {
+    return {}
+  }
+}
+
 interface SidebarProps {
   tree: TreeNode | null
   queue: DocSummary[]
@@ -39,7 +49,9 @@ export function Sidebar(props: SidebarProps) {
   const { tree, queue, view, inboxCount, aiRunningCount, git, vaultPath, vaults, activeVault, config, width, setView, openDoc, refresh, switchVault } = props
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [lastClicked, setLastClicked] = useState<string | null>(null)
-  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({})
+  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>(() => readOpenFolders(activeVault))
+  const openFoldersVaultRef = useRef(activeVault)
+  const skipPersistRef = useRef(false)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [treeDropOver, setTreeDropOver] = useState(false)
   const [dropTarget, setDropTarget] = useState<string | null>(null)
@@ -48,6 +60,24 @@ export function Sidebar(props: SidebarProps) {
   const dragDepth = useRef(0)
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const brandRef = useRef<HTMLButtonElement>(null)
+
+  // folder paths collide across vaults — reload the persisted open/collapsed map when the active vault changes
+  useEffect(() => {
+    if (activeVault === openFoldersVaultRef.current) return
+    openFoldersVaultRef.current = activeVault
+    skipPersistRef.current = true
+    setOpenFolders(readOpenFolders(activeVault))
+  }, [activeVault])
+
+  // only `false` (collapsed) entries are meaningful (default is open) — prune before writing to keep the blob minimal
+  useEffect(() => {
+    if (skipPersistRef.current) {
+      skipPersistRef.current = false
+      return
+    }
+    const collapsed = Object.fromEntries(Object.entries(openFolders).filter(([, open]) => open === false))
+    localStorage.setItem(openFoldersKey(openFoldersVaultRef.current), JSON.stringify(collapsed))
+  }, [openFolders])
 
   // an aborted drag (Esc) fires no drop/dragleave on our elements — clear any stuck highlight
   useEffect(() => {
