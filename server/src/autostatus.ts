@@ -23,7 +23,8 @@ export async function sweepAutoActive(): Promise<string[]> {
       const { meta } = vault.readDoc(rel)
       if (meta.status !== 'draft' && meta.status !== 'waiting') continue
       if (!(record.at > (meta.updated ?? ''))) continue
-      vault.updateMeta(rel, { status: 'active' })
+      // clear a stale `waiting` note too — resumed editing means it's no longer accurate
+      vault.updateMeta(rel, { status: 'active', agentNote: undefined })
       await gitops.commitAll(`auto-status: active — Claude session activity: ${rel}`)
       flipped.push(rel)
     } catch {
