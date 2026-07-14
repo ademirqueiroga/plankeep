@@ -165,6 +165,7 @@ export default function App() {
             vaultPath={vaultPath}
             vaults={vaults}
             activeVault={activeVault}
+            config={config}
             width={sidebarWidth}
             setView={setView}
             openDoc={openDoc}

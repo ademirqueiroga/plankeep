@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, type ClaudeActivity, type DocSummary, type GitState, type TreeNode, type VaultEntry } from '../api'
+import { api, type ClaudeActivity, type Config, type DocSummary, type GitState, type TreeNode, type VaultEntry } from '../api'
 import type { View } from '../App'
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu'
 import { dialog } from './Dialog'
@@ -27,6 +27,7 @@ interface SidebarProps {
   vaultPath: string
   vaults: VaultEntry[]
   activeVault: string
+  config: Config | null
   width: number
   setView: (v: View) => void
   openDoc: (path: string) => void
@@ -35,7 +36,7 @@ interface SidebarProps {
 }
 
 export function Sidebar(props: SidebarProps) {
-  const { tree, queue, view, inboxCount, aiRunningCount, git, vaultPath, vaults, activeVault, width, setView, openDoc, refresh, switchVault } = props
+  const { tree, queue, view, inboxCount, aiRunningCount, git, vaultPath, vaults, activeVault, config, width, setView, openDoc, refresh, switchVault } = props
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [lastClicked, setLastClicked] = useState<string | null>(null)
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({})
@@ -154,14 +155,37 @@ export function Sidebar(props: SidebarProps) {
    * (copy/move works, source recorded) and auto-file under its project folder.
    */
   const importExternal = async (files: File[], folder: string | null) => {
-    for (const file of files) {
-      if (!file.name.endsWith('.md')) continue
-      const hits = await api.resolveSource(file.name)
-      if (hits.length >= 1) {
-        await api.importFile(hits[0].path, folder ?? hits[0].project, undefined, hits[0].project)
-      } else {
-        await api.importContent(file.name, await file.text(), folder ?? '')
-      }
+    const mdFiles = files.filter((f) => f.name.endsWith('.md'))
+    const resolved = await Promise.all(mdFiles.map(async (file) => ({ file, hits: await api.resolveSource(file.name) })))
+    const withHit = resolved.filter((r) => r.hits.length >= 1)
+    const withoutHit = resolved.filter((r) => r.hits.length === 0)
+
+    let leaveLink: boolean | undefined
+    if ((config?.importMode ?? 'copy') === 'move' && withHit.length > 0) {
+      const warnings = (await Promise.all(withHit.map((r) => activityWarning({ abs: r.hits[0].path })))).filter((w): w is string => !!w)
+      const warning =
+        warnings.length === 0
+          ? undefined
+          : warnings.length === 1
+            ? warnings[0]
+            : `${warnings.length} of these files were written to recently by a Claude session — moving them will break that session's path references.`
+      const res = await dialog.confirmOption({
+        title: withHit.length > 1 ? `Import ${withHit.length} documents` : 'Import document',
+        body: withHit.map((r) => `${r.hits[0].path} → ${folder ?? r.hits[0].project}`).join('\n'),
+        warning,
+        confirmLabel: 'Import',
+        checkboxLabel: withHit.length > 1 ? 'Leave symlinks at the original locations' : 'Leave a symlink at the original location',
+        checkboxInitial: true,
+      })
+      if (!res.ok) return
+      leaveLink = res.checked
+    }
+
+    for (const { hits } of withHit) {
+      await api.importFile(hits[0].path, folder ?? hits[0].project, undefined, hits[0].project, leaveLink)
+    }
+    for (const { file } of withoutHit) {
+      await api.importContent(file.name, await file.text(), folder ?? '')
     }
     await refresh()
   }
