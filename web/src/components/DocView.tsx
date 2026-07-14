@@ -13,7 +13,7 @@ import type { DocApi } from '../shortcuts'
 import { activityWarning } from '../moveGuard'
 
 const TYPES = ['plan', 'findings', 'exploration', 'research', 'note'] as const
-const STATUSES = ['draft', 'active', 'done', 'archived'] as const
+const STATUSES = ['draft', 'active', 'waiting', 'done', 'archived'] as const
 const AI_ACTIONS = [
   { id: 'improve', label: 'Improve readability', hint: 'Rewrite for clarity, keep all information' },
   { id: 'checkboxify', label: 'Add checkboxes', hint: 'Turn phases/steps into task lists' },
@@ -351,6 +351,9 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
             </span>
             {doc.claudeActivity && <ClaudeActivityBadge activity={doc.claudeActivity} />}
           </div>
+          {doc.meta.agentNote && (
+            <div className={`agent-note${doc.meta.status === 'waiting' ? ' waiting' : ''}`}>⏸ {doc.meta.agentNote}</div>
+          )}
         </div>
 
         {editing ? (

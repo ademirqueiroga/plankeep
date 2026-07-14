@@ -1,5 +1,5 @@
 export type DocType = 'plan' | 'findings' | 'exploration' | 'research' | 'note'
-export type DocStatus = 'draft' | 'active' | 'done' | 'archived'
+export type DocStatus = 'draft' | 'active' | 'done' | 'archived' | 'waiting'
 
 export interface DocMeta {
   id: string
@@ -9,6 +9,7 @@ export interface DocMeta {
   source?: { project?: string; path?: string; mode?: 'copy' | 'move' }
   imported?: string
   updated?: string
+  agentNote?: string
 }
 
 export interface ClaudeActivity {

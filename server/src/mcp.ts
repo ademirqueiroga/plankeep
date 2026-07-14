@@ -6,7 +6,9 @@ import * as gitops from './gitops.js'
 import * as queue from './queue.js'
 import * as inbox from './inbox.js'
 import * as scanner from './scanner.js'
-import { vaultRootByName } from './config.js'
+import * as ai from './ai.js'
+import * as activity from './activity.js'
+import { loadConfig, vaultRootByName } from './config.js'
 
 const text = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] })
 
@@ -92,16 +94,46 @@ export async function runMcp(): Promise<void> {
 
   server.tool(
     'set_metadata',
-    'Update a document\'s type, status (draft|active|done|archived) or tags.',
+    'Update a document\'s type, status (draft|active|waiting|done|archived) or tags.',
     {
       path: z.string(),
       type: z.enum(['plan', 'findings', 'exploration', 'research', 'note']).optional(),
-      status: z.enum(['draft', 'active', 'done', 'archived']).optional(),
+      status: z.enum(['draft', 'active', 'waiting', 'done', 'archived']).optional(),
       tags: z.array(z.string()).optional(),
     },
     async ({ path: rel, ...patch }) => {
       const meta = vault.updateMeta(rel, patch)
       await gitops.commitAll(`meta: ${rel}`)
+      return text(meta)
+    },
+  )
+
+  server.tool(
+    'list_vaults',
+    'List the user\'s registered PlanKeep vaults (name + path) and which one is currently active in the UI. Use a vault name with the `vault` param on other tools to target a non-active vault.',
+    {},
+    async () => {
+      const config = loadConfig()
+      return text({ active: config.activeVault, vaults: config.vaults.map((v) => ({ name: v.name, path: v.path })) })
+    },
+  )
+
+  server.tool(
+    'report_plan_state',
+    'Reflect your implementation state on the plan you are executing. Call with working when you start, waiting whenever you stop before completion (user question, blocker, end of session), done when finished. Keep it current — the user reads this state in the PlanKeep UI.',
+    {
+      path: z.string().describe('Vault-relative path of the plan being worked'),
+      state: z.enum(['working', 'waiting', 'done']).describe('working = actively implementing now; waiting = stopped (needs human input / blocked / handing off); done = implementation finished and verified'),
+      note: z.string().max(300).optional().describe('One line on why — e.g. "waiting: needs the user to approve the API change"'),
+      vault: z.string().optional().describe('Vault name (see list_vaults); defaults to the active vault'),
+    },
+    async ({ path: rel, state, note, vault: vaultName }) => {
+      if (ai.hasRunningJobFor(rel)) throw new Error(ai.AI_JOB_BLOCK)
+      const root = vaultName ? vaultRootByName(vaultName) : undefined
+      const status = state === 'working' ? 'active' : state === 'waiting' ? 'waiting' : 'done'
+      const meta = vault.updateMeta(rel, { status, agentNote: note }, root)
+      activity.recordClaudeWrite(vault.safePath(rel, root), { tool: 'mcp' })
+      await gitops.commitAll(`agent-state: ${state} — ${rel}`)
       return text(meta)
     },
   )

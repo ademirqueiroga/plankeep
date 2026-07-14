@@ -141,7 +141,7 @@ export function buildApp(): Hono {
     await gitops.commitAll(`meta: ${rel}`)
     return c.json(meta)
   })
-  const AI_JOB_BLOCK = 'An AI action is currently running on this document — wait for it to finish.'
+  const AI_JOB_BLOCK = ai.AI_JOB_BLOCK
 
   /** Best-effort relative symlink at `fromAbs` pointing to `toAbs`; skips silently if something already exists there. */
   const leaveLinkAt = (fromAbs: string, toAbs: string) => {

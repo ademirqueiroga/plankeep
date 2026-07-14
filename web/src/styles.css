@@ -729,11 +729,16 @@ input:focus, select:focus, textarea:focus {
 .status-pill.s-active { color: var(--brand); border-color: var(--brand); background: var(--brand-soft); }
 .status-pill.s-done { color: var(--ok); border-color: var(--ok); }
 .status-pill.s-archived { opacity: 0.6; }
+.status-pill.s-waiting { color: #8a6d1f; border-color: #8a6d1f; background: rgba(176, 141, 32, 0.12); }
 .session-badge { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
 .session-badge:hover { color: var(--mut); }
 
+.agent-note { font-size: 12.5px; color: var(--mut); margin-top: 4px; }
+.agent-note.waiting { font-style: italic; }
+
 .active-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--brand); flex-shrink: 0; }
 .active-dot.live { animation: pk-pulse 2s ease-in-out infinite; }
+.wait-dot { width: 5px; height: 5px; border-radius: 50%; border: 1.5px solid #8a6d1f; background: transparent; flex-shrink: 0; }
 @keyframes pk-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.7); } }
 
 /* right properties panel */

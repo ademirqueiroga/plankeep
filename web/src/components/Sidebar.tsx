@@ -486,10 +486,11 @@ export function Sidebar(props: SidebarProps) {
             if (!selected.has(child.path)) setSelected(new Set([child.path]))
             showMenu(e, docMenu(child.path))
           }}
-          title={child.path}
+          title={child.doc!.meta.agentNote ? `${child.path} — ⏸ ${child.doc!.meta.agentNote}` : child.path}
         >
           <span className="doc-glyph">{TYPE_ICONS[child.doc!.meta.type] ?? '≡'}</span>
           {child.doc!.meta.status === 'active' && <ActiveDot activity={child.doc!.claudeActivity} />}
+          {child.doc!.meta.status === 'waiting' && <span className="wait-dot" />}
           <span className="row-label">{child.doc!.title}</span>
           {child.doc!.progress.total > 0 && (
             <span className={`row-progress${child.doc!.progress.done === child.doc!.progress.total ? ' done' : ''}`}>

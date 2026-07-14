@@ -81,7 +81,18 @@ Every markdown file Claude writes lands in the inbox, except infra files (README
 claude mcp add --scope user plankeep -- /absolute/path/to/node /absolute/path/to/plankeep/server/dist/cli.js mcp
 ```
 
-Tools: `save_document` (LLMs should file plans here instead of repo roots), `list_documents`, `get_document`, `import_file`, `search_documents`, `set_metadata`, `get_up_next_queue`, `add_to_up_next`, `list_inbox`. Tip: add a memory/CLAUDE.md note telling Claude to save plans via `save_document` with `folder` = project name.
+Tools: `save_document` (LLMs should file plans here instead of repo roots), `list_documents`, `get_document`, `import_file`, `search_documents`, `set_metadata`, `report_plan_state`, `get_up_next_queue`, `add_to_up_next`, `list_inbox`, `list_vaults`. Tip: add a memory/CLAUDE.md note telling Claude to save plans via `save_document` with `folder` = project name.
+
+## Skill: plan execution
+
+`skills/plan-execution/SKILL.md` teaches an agent the protocol for working a plan stored in the vault: read it fully first, call `report_plan_state` with `working` on start, `waiting` (with a one-line note) whenever it stops before completion, and `done` when finished — so the vault UI always reflects whether a plan is actively being worked or stalled waiting on the human.
+
+Install (symlink so repo updates propagate):
+
+```bash
+mkdir -p ~/.claude/skills
+ln -s /absolute/path/to/plankeep/skills/plan-execution ~/.claude/skills/plankeep-plan-execution
+```
 
 ## Setup: vault backup on GitHub
 

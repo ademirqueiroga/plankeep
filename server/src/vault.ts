@@ -6,7 +6,7 @@ import { expandTilde, loadConfig, vaultPath } from './config.js'
 import { getActivityMap, type ActivityRecord } from './activity.js'
 
 export type DocType = 'plan' | 'findings' | 'exploration' | 'research' | 'note'
-export type DocStatus = 'draft' | 'active' | 'done' | 'archived'
+export type DocStatus = 'draft' | 'active' | 'done' | 'archived' | 'waiting'
 
 export interface DocMeta {
   id: string
@@ -16,6 +16,7 @@ export interface DocMeta {
   source?: { project?: string; path?: string; mode?: 'copy' | 'move' }
   imported?: string
   updated?: string
+  agentNote?: string
 }
 
 export interface DocSummary {
@@ -73,6 +74,7 @@ function normalizeMeta(raw: unknown): DocMeta {
     source: m.source,
     imported: m.imported,
     updated: m.updated,
+    agentNote: m.agentNote,
   }
 }
 
@@ -139,7 +141,7 @@ export function autoStatusFor(rel: string, root: string = vaultRoot()): DocStatu
   return null
 }
 
-export function updateMeta(rel: string, patch: Partial<Pick<DocMeta, 'type' | 'status' | 'tags'>>, root: string = vaultRoot()): DocMeta {
+export function updateMeta(rel: string, patch: Partial<Pick<DocMeta, 'type' | 'status' | 'tags' | 'agentNote'>>, root: string = vaultRoot()): DocMeta {
   const doc = readDoc(rel, root)
   const parsed = matter(doc.content)
   const extra = { ...parsed.data }

@@ -8,6 +8,8 @@ import { configDir } from './config.js'
 
 export type AiAction = 'improve' | 'checkboxify' | 'refresh'
 
+export const AI_JOB_BLOCK = 'An AI action is currently running on this document — wait for it to finish.'
+
 export interface AiJob {
   id: string
   action: AiAction
