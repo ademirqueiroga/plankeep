@@ -26,7 +26,15 @@ export function hashToView(hash: string): View | null {
     const [slug, file] = rest.map(decodeURIComponent)
     return { kind: 'memory', slug, file, displayName: slug, title: file }
   }
-  if (kind === 'queue' || kind === 'inbox' || kind === 'search' || kind === 'settings' || kind === 'activity' || kind === 'memories') {
+  if (
+    kind === 'queue' ||
+    kind === 'inbox' ||
+    kind === 'search' ||
+    kind === 'archived' ||
+    kind === 'settings' ||
+    kind === 'activity' ||
+    kind === 'memories'
+  ) {
     return { kind }
   }
   return null

@@ -22,6 +22,7 @@ export interface DocApi {
   del: () => void
   rename: () => void
   addToQueue: () => void
+  archive: () => void
   toggleOutline: () => void
   togglePanel: () => void
 }
@@ -67,6 +68,7 @@ export function buildCommands(ctx: Ctx): Command[] {
     { id: 'go-activity', title: 'Go to Activity', group: 'Navigate', run: (c) => c.setView({ kind: 'activity' }) },
     { id: 'go-memories', title: 'Go to Memories', group: 'Navigate', run: (c) => c.setView({ kind: 'memories' }) },
     { id: 'go-search', title: 'Go to Search view', group: 'Navigate', run: (c) => c.setView({ kind: 'search' }) },
+    { id: 'go-archived', title: 'Go to Archived', group: 'Navigate', run: (c) => c.setView({ kind: 'archived' }) },
     { id: 'go-settings', title: 'Go to Settings', group: 'Navigate', run: (c) => c.setView({ kind: 'settings' }) },
     ...(ctx.vaults ?? [])
       .filter((v) => v.name !== ctx.activeVault)
@@ -87,6 +89,7 @@ export function buildCommands(ctx: Ctx): Command[] {
     { id: 'doc-copy-abs', title: 'Copy absolute path', group: 'Document', when: () => inDoc, run: (c) => c.docApi?.copyAbsPath() },
     { id: 'doc-copy-mention', title: 'Copy @mention', group: 'Document', when: () => inDoc, run: (c) => c.docApi?.copyMention() },
     { id: 'doc-add-queue', title: 'Add to Up Next', group: 'Document', when: () => inDoc, run: (c) => c.docApi?.addToQueue() },
+    { id: 'doc-archive', title: 'Archive document', group: 'Document', when: () => inDoc, run: (c) => c.docApi?.archive() },
     { id: 'doc-toggle-outline', title: 'Toggle outline', group: 'Document', when: () => inDoc, run: (c) => c.docApi?.toggleOutline() },
     { id: 'doc-rename', title: 'Move / rename…', group: 'Document', when: () => inDoc, run: (c) => c.docApi?.rename() },
     { id: 'doc-reveal', title: 'Reveal in Finder', group: 'Document', when: () => !!docPath, run: () => docPath && api.reveal({ path: docPath }) },

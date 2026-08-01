@@ -6,6 +6,7 @@ import { QueueView } from './components/QueueView'
 import { InboxView } from './components/InboxView'
 import { SettingsView } from './components/SettingsView'
 import { SearchView } from './components/SearchView'
+import { ArchivedView } from './components/ArchivedView'
 import { ActivityView } from './components/ActivityView'
 import { MemoriesView } from './components/MemoriesView'
 import { DialogHost, dialog } from './components/Dialog'
@@ -20,6 +21,7 @@ export type View =
   | { kind: 'queue' }
   | { kind: 'inbox' }
   | { kind: 'search' }
+  | { kind: 'archived' }
   | { kind: 'settings' }
   | { kind: 'activity' }
   | { kind: 'memories' }
@@ -29,6 +31,7 @@ const VIEW_TITLES: Record<string, string> = {
   queue: 'Up Next',
   inbox: 'Inbox',
   search: 'Search',
+  archived: 'Archived',
   settings: 'Settings',
   activity: 'Activity',
   memories: 'Memories',
@@ -261,6 +264,7 @@ export default function App() {
           {view.kind === 'queue' && <QueueView openDoc={openDoc} refresh={refresh} />}
           {view.kind === 'inbox' && <InboxView config={config} openDoc={openDoc} refresh={refresh} />}
           {view.kind === 'search' && <SearchView openDoc={openDoc} />}
+          {view.kind === 'archived' && <ArchivedView openDoc={openDoc} refresh={refresh} />}
           {view.kind === 'settings' && <SettingsView refresh={refresh} />}
           {view.kind === 'activity' && <ActivityView openDoc={openDoc} />}
           {(view.kind === 'memories' || view.kind === 'memory') && <MemoriesView view={view} setView={setView} />}

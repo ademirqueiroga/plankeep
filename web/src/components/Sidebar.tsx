@@ -310,6 +310,11 @@ export function Sidebar(props: SidebarProps) {
       const paths = [...selected]
       return [
         { label: `Add ${paths.length} to Up Next`, onClick: async () => { for (const p of paths) await api.queueAdd(p); await refresh() } },
+        { label: `Archive ${paths.length} documents`, onClick: async () => {
+          for (const p of paths) await api.setMeta(p, { status: 'archived' })
+          setSelected(new Set())
+          await refresh()
+        } },
         { label: `Copy ${paths.length} paths`, onClick: () => navigator.clipboard.writeText(paths.map(absOf).join('\n')) },
         { label: 'Move to folder…', onClick: async () => {
           const folder = await dialog.prompt({ title: 'Move to folder', label: 'Destination folder (empty = vault root)' })
@@ -322,6 +327,7 @@ export function Sidebar(props: SidebarProps) {
     return [
       { label: 'Open', onClick: () => openDoc(path) },
       { label: 'Add to Up Next', onClick: () => api.queueAdd(path).then(refresh) },
+      { label: 'Archive', onClick: () => api.setMeta(path, { status: 'archived' }).then(refresh) },
       { separator: true },
       { label: 'Rename / Move…', onClick: async () => {
         const res = await dialog.promptOption({
@@ -662,6 +668,14 @@ export function Sidebar(props: SidebarProps) {
             </div>
           )}
         </div>
+        {archivedCount > 0 && (
+          <button
+            className={`archived-entry${view.kind === 'archived' ? ' active' : ''}`}
+            onClick={() => setView({ kind: 'archived' })}
+          >
+            <span className="nav-glyph">▤</span> Archived ({archivedCount})
+          </button>
+        )}
         <div className={`drop-hint${dropTarget !== null ? ' active' : ''}`}>
           {dropTarget === null
             ? "Drop .md files anywhere in this area — they're filed under their source project"

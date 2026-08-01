@@ -256,6 +256,11 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
     }, 3000)
   }
 
+  const archive = async () => {
+    await setMeta({ status: 'archived' })
+    setStatusMessage('Archived — hidden from the vault tree and removed from Up Next.')
+  }
+
   const rename = async () => {
     const res = await dialog.promptOption({
       title: 'Move / rename',
@@ -359,6 +364,7 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
       del,
       rename,
       addToQueue: () => api.queueAdd(path).then(refresh),
+      archive,
       toggleOutline: () => setOutlinePinned((p) => !p),
       togglePanel: () => setPanelCollapsed((p) => !p),
     })
@@ -525,6 +531,11 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
               {editing ? 'View rendered' : 'Edit markdown'}
             </button>
           </Tooltip>
+          {doc.meta.status !== 'archived' && (
+            <Tooltip label="Hide from the vault tree — find it later in Archived">
+              <button className="panel-btn" onClick={archive}>Archive</button>
+            </Tooltip>
+          )}
           <button className="panel-btn" onClick={rename}>Move / rename…</button>
           <button className="panel-btn" onClick={() => api.reveal({ path })}>Reveal in Finder</button>
         </PanelGroup>

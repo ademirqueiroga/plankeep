@@ -103,6 +103,8 @@ export async function runMcp(): Promise<void> {
     },
     async ({ path: rel, ...patch }) => {
       const meta = vault.updateMeta(rel, patch)
+      // archiving takes the doc out of circulation — Up Next should never hold one
+      if (patch.status === 'archived') queue.removeFromQueue(rel)
       await gitops.commitAll(`meta: ${rel}`)
       return text(meta)
     },

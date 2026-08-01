@@ -23,7 +23,7 @@ export function SearchView({ openDoc }: { openDoc: (p: string) => void }) {
       {hits.map((h) => (
         <div key={h.path} className="search-hit" onClick={() => openDoc(h.path)}>
           <div className="search-title">
-            {h.title} <span className="tag">{h.meta.type}</span> <span className="tag">{h.meta.status}</span>
+            {h.title} <span className="tag">{h.meta.type}</span> <span className={`status-pill s-${h.meta.status}`}>{h.meta.status}</span>
           </div>
           <div className="search-path">{h.path} <CopyBtn value={h.path} /></div>
           {h.snippets.map((s, i) => (

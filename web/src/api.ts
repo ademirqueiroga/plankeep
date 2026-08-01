@@ -167,6 +167,7 @@ export const api = {
     patch<VaultsResponse>(`/api/vaults/${encodeURIComponent(name)}`, body),
   saveSettings: (config: Partial<Config>) => put<{ config: Config }>('/api/settings', config),
   tree: () => request<TreeNode>('/api/tree'),
+  docs: () => request<DocSummary[]>('/api/docs'),
   doc: (path: string) => request<FullDoc>(`/api/doc?path=${encodeURIComponent(path)}`),
   saveDoc: (path: string, content: string) => put<DocSummary>('/api/doc', { path, content }),
   saveBody: (path: string, body: string) => put<DocSummary>('/api/doc', { path, body }),

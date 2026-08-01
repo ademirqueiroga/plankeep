@@ -138,6 +138,8 @@ export function buildApp(): Hono {
   api.post('/doc/meta', async (c) => {
     const { path: rel, ...patch } = await c.req.json()
     const meta = vault.updateMeta(rel, patch)
+    // archiving takes the doc out of circulation — Up Next should never hold one
+    if (patch.status === 'archived') queue.removeFromQueue(rel)
     await gitops.commitAll(`meta: ${rel}`)
     return c.json(meta)
   })
