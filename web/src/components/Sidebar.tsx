@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type ClaudeActivity, type Config, type DocSummary, type GitState, type TreeNode, type VaultEntry } from '../api'
 import type { View } from '../App'
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu'
@@ -8,8 +8,9 @@ import { PickerMenu } from './PickerMenu'
 import { activityWarning } from '../moveGuard'
 import { ago } from './ActivityView'
 import { addVaultFlow } from '../vaultActions'
+import { countArchived, flattenOrganized, organizeDocs, TREE_SORT_LABELS, TREE_SORTS, type OrganizedDoc, type TreeSort } from '../treeOrder'
 
-const TYPE_ICONS: Record<string, string> = {
+export const TYPE_ICONS: Record<string, string> = {
   plan: '◫',
   findings: '◎',
   exploration: '✧',
@@ -39,6 +40,8 @@ interface SidebarProps {
   activeVault: string
   config: Config | null
   width: number
+  treeSort: TreeSort
+  setTreeSort: (s: TreeSort) => void
   setView: (v: View) => void
   openDoc: (path: string) => void
   refresh: () => Promise<void>
@@ -46,7 +49,7 @@ interface SidebarProps {
 }
 
 export function Sidebar(props: SidebarProps) {
-  const { tree, queue, view, inboxCount, aiRunningCount, git, vaultPath, vaults, activeVault, config, width, setView, openDoc, refresh, switchVault } = props
+  const { tree, queue, view, inboxCount, aiRunningCount, git, vaultPath, vaults, activeVault, config, width, treeSort, setTreeSort, setView, openDoc, refresh, switchVault } = props
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [lastClicked, setLastClicked] = useState<string | null>(null)
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>(() => readOpenFolders(activeVault))
@@ -57,9 +60,11 @@ export function Sidebar(props: SidebarProps) {
   const [dropTarget, setDropTarget] = useState<string | null>(null)
   const [focusedPath, setFocusedPath] = useState<string | null>(null)
   const [vaultMenuOpen, setVaultMenuOpen] = useState(false)
+  const [sortMenuOpen, setSortMenuOpen] = useState(false)
   const dragDepth = useRef(0)
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const brandRef = useRef<HTMLButtonElement>(null)
+  const sortBtnRef = useRef<HTMLButtonElement>(null)
 
   // folder paths collide across vaults — reload the persisted open/collapsed map when the active vault changes
   useEffect(() => {
@@ -92,32 +97,31 @@ export function Sidebar(props: SidebarProps) {
 
   const isOpen = useCallback((path: string) => openFolders[path] !== false, [openFolders])
 
-  /** Visible docs in display order — used for shift-click range selection. */
-  const visibleDocs = useMemo(() => {
-    const out: string[] = []
-    const walk = (node: TreeNode) => {
-      for (const child of node.children ?? []) {
-        if (child.kind === 'folder') {
-          if (isOpen(child.path)) walk(child)
-        } else out.push(child.path)
-      }
-    }
-    if (tree) walk(tree)
-    return out
-  }, [tree, isOpen])
-
-  /** Visible rows (folders + docs) in display order — drives keyboard navigation. */
+  /**
+   * Visible rows (folders + docs) in display order — drives keyboard navigation.
+   * Walks the same folders-then-organizeDocs structure the renderer does, so ArrowUp/Down
+   * and ⇧-click ranges can never diverge from what's on screen.
+   */
   const visibleRows = useMemo(() => {
     const out: Array<{ path: string; kind: 'folder' | 'doc' }> = []
     const walk = (node: TreeNode) => {
       for (const child of node.children ?? []) {
-        out.push({ path: child.path, kind: child.kind })
-        if (child.kind === 'folder' && isOpen(child.path)) walk(child)
+        if (child.kind !== 'folder') continue
+        out.push({ path: child.path, kind: 'folder' })
+        if (isOpen(child.path)) walk(child)
+      }
+      for (const { node: doc } of flattenOrganized(organizeDocs(node.children ?? [], treeSort))) {
+        out.push({ path: doc.path, kind: 'doc' })
       }
     }
     if (tree) walk(tree)
     return out
-  }, [tree, isOpen])
+  }, [tree, isOpen, treeSort])
+
+  /** Visible docs in display order — used for shift-click range selection. */
+  const visibleDocs = useMemo(() => visibleRows.filter((r) => r.kind === 'doc').map((r) => r.path), [visibleRows])
+
+  const archivedCount = useMemo(() => countArchived(tree), [tree])
 
   const absOf = (rel: string) => (vaultPath ? `${vaultPath}/${rel}` : rel)
 
@@ -484,52 +488,68 @@ export function Sidebar(props: SidebarProps) {
     }
   }
 
-  const renderChildren = (node: TreeNode, depth: number): React.ReactNode =>
-    node.children?.map((child) =>
-      child.kind === 'folder' ? (
-        <div key={child.path}>
-          <div
-            ref={(el) => { if (el) rowRefs.current.set(child.path, el); else rowRefs.current.delete(child.path) }}
-            className={`tree-row folder-row${dropTarget === child.path ? ' drop-target' : ''}${focusedPath === child.path ? ' focused' : ''}`}
-            style={{ paddingLeft: 8 + depth * 14 }}
-            onClick={() => { setFocusedPath(child.path); setOpenFolders({ ...openFolders, [child.path]: !isOpen(child.path) }) }}
-            onContextMenu={(e) => showMenu(e, folderMenu(child.path))}
-            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDropTarget(child.path) }}
-            onDrop={(e) => handleDrop(e, child.path)}
-          >
-            <span className={`chevron${isOpen(child.path) ? ' open' : ''}`}>›</span>
-            <span className="row-label">{child.name}</span>
-            <span className="row-count">{child.children?.filter((c) => c.kind === 'doc').length || ''}</span>
+  const renderDocRow = (child: TreeNode, depth: number, level: number) => (
+    <div
+      ref={(el) => { if (el) rowRefs.current.set(child.path, el); else rowRefs.current.delete(child.path) }}
+      className={`tree-row doc-row${view.kind === 'doc' && view.path === child.path ? ' active' : ''}${selected.has(child.path) ? ' selected' : ''}${focusedPath === child.path ? ' focused' : ''} status-${child.doc!.meta.status}`}
+      style={{ paddingLeft: 8 + depth * 14 + 14 + level * 14 }}
+      draggable
+      onDragStart={(e) => startDrag(child.path, e)}
+      onClick={(e) => { setFocusedPath(child.path); handleDocClick(child.path, e) }}
+      onContextMenu={(e) => {
+        if (!selected.has(child.path)) setSelected(new Set([child.path]))
+        showMenu(e, docMenu(child.path))
+      }}
+      title={child.doc!.meta.agentNote ? `${child.path} — ⏸ ${child.doc!.meta.agentNote}` : child.path}
+    >
+      <span className="doc-glyph">{TYPE_ICONS[child.doc!.meta.type] ?? '≡'}</span>
+      {child.doc!.meta.status === 'active' && <ActiveDot activity={child.doc!.claudeActivity} />}
+      {child.doc!.meta.status === 'waiting' && <span className="wait-dot" />}
+      <span className="row-label">{child.doc!.title}</span>
+      {child.doc!.progress.total > 0 && (
+        <span className={`row-progress${child.doc!.progress.done === child.doc!.progress.total ? ' done' : ''}`}>
+          {child.doc!.progress.done}/{child.doc!.progress.total}
+        </span>
+      )}
+    </div>
+  )
+
+  /** Derived docs indent one step per hierarchy level, mirroring an inner bullet list. */
+  const renderOrganized = (items: OrganizedDoc[], depth: number, level: number): React.ReactNode =>
+    items.map((item) => (
+      <Fragment key={item.node.path}>
+        {renderDocRow(item.node, depth, level)}
+        {item.children.length > 0 && renderOrganized(item.children, depth, level + 1)}
+      </Fragment>
+    ))
+
+  const renderChildren = (node: TreeNode, depth: number): React.ReactNode => (
+    <>
+      {node.children
+        ?.filter((c) => c.kind === 'folder')
+        .map((child) => (
+          <div key={child.path}>
+            <div
+              ref={(el) => { if (el) rowRefs.current.set(child.path, el); else rowRefs.current.delete(child.path) }}
+              className={`tree-row folder-row${dropTarget === child.path ? ' drop-target' : ''}${focusedPath === child.path ? ' focused' : ''}`}
+              style={{ paddingLeft: 8 + depth * 14 }}
+              onClick={() => { setFocusedPath(child.path); setOpenFolders({ ...openFolders, [child.path]: !isOpen(child.path) }) }}
+              onContextMenu={(e) => showMenu(e, folderMenu(child.path))}
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDropTarget(child.path) }}
+              onDrop={(e) => handleDrop(e, child.path)}
+            >
+              <span className={`chevron${isOpen(child.path) ? ' open' : ''}`}>›</span>
+              <span className="row-label">{child.name}</span>
+              <span className="row-count">
+                {child.children?.filter((c) => c.kind === 'doc' && c.doc?.meta.status !== 'archived').length || ''}
+              </span>
+            </div>
+            {isOpen(child.path) && renderChildren(child, depth + 1)}
           </div>
-          {isOpen(child.path) && renderChildren(child, depth + 1)}
-        </div>
-      ) : (
-        <div
-          key={child.path}
-          ref={(el) => { if (el) rowRefs.current.set(child.path, el); else rowRefs.current.delete(child.path) }}
-          className={`tree-row doc-row${view.kind === 'doc' && view.path === child.path ? ' active' : ''}${selected.has(child.path) ? ' selected' : ''}${focusedPath === child.path ? ' focused' : ''} status-${child.doc!.meta.status}`}
-          style={{ paddingLeft: 8 + depth * 14 + 14 }}
-          draggable
-          onDragStart={(e) => startDrag(child.path, e)}
-          onClick={(e) => { setFocusedPath(child.path); handleDocClick(child.path, e) }}
-          onContextMenu={(e) => {
-            if (!selected.has(child.path)) setSelected(new Set([child.path]))
-            showMenu(e, docMenu(child.path))
-          }}
-          title={child.doc!.meta.agentNote ? `${child.path} — ⏸ ${child.doc!.meta.agentNote}` : child.path}
-        >
-          <span className="doc-glyph">{TYPE_ICONS[child.doc!.meta.type] ?? '≡'}</span>
-          {child.doc!.meta.status === 'active' && <ActiveDot activity={child.doc!.claudeActivity} />}
-          {child.doc!.meta.status === 'waiting' && <span className="wait-dot" />}
-          <span className="row-label">{child.doc!.title}</span>
-          {child.doc!.progress.total > 0 && (
-            <span className={`row-progress${child.doc!.progress.done === child.doc!.progress.total ? ' done' : ''}`}>
-              {child.doc!.progress.done}/{child.doc!.progress.total}
-            </span>
-          )}
-        </div>
-      ),
-    )
+        ))}
+      {renderOrganized(organizeDocs(node.children ?? [], treeSort), depth, 0)}
+    </>
+  )
 
   return (
     <aside className="sidebar" style={{ width }}>
@@ -600,18 +620,34 @@ export function Sidebar(props: SidebarProps) {
       >
         <div className="section-header static">
           Vault
-          <Tooltip label="New folder">
-            <button
-              className="icon-btn"
-              onClick={async () => {
-                const name = await dialog.prompt({ title: 'New folder', label: 'Folder name (use / for nesting)' })
-                if (name?.trim()) { await api.createFolder(name.trim()); await refresh() }
-              }}
-            >
-              +
-            </button>
-          </Tooltip>
+          <span className="section-header-actions">
+            <Tooltip label="Sort documents">
+              <button ref={sortBtnRef} className="icon-btn" onClick={() => setSortMenuOpen((o) => !o)}>
+                <SortIcon />
+              </button>
+            </Tooltip>
+            <Tooltip label="New folder">
+              <button
+                className="icon-btn"
+                onClick={async () => {
+                  const name = await dialog.prompt({ title: 'New folder', label: 'Folder name (use / for nesting)' })
+                  if (name?.trim()) { await api.createFolder(name.trim()); await refresh() }
+                }}
+              >
+                +
+              </button>
+            </Tooltip>
+          </span>
         </div>
+        {sortMenuOpen && (
+          <PickerMenu
+            anchorRef={sortBtnRef}
+            options={TREE_SORTS.map((s) => ({ value: s, label: TREE_SORT_LABELS[s] }))}
+            current={treeSort}
+            onSelect={(v) => setTreeSort(v as TreeSort)}
+            onClose={() => setSortMenuOpen(false)}
+          />
+        )}
         <div
           className="tree"
           tabIndex={0}
@@ -656,6 +692,14 @@ export function Sidebar(props: SidebarProps) {
 
       {menu && <ContextMenu menu={menu} onClose={() => setMenu(null)} />}
     </aside>
+  )
+}
+
+function SortIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M2.5 4h10M2.5 8h6.5M2.5 12h3.5" />
+    </svg>
   )
 }
 

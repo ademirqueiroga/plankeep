@@ -1,6 +1,7 @@
 import type { View } from './App'
 import { api, type VaultEntry } from './api'
 import { dialog } from './components/Dialog'
+import { TREE_SORT_LABELS, TREE_SORTS, type TreeSort } from './treeOrder'
 
 const AI_ACTIONS = [
   { id: 'improve', label: 'AI: Improve readability' },
@@ -35,6 +36,8 @@ export interface Ctx {
   vaults?: VaultEntry[]
   activeVault?: string
   switchVault?: (name: string) => Promise<void>
+  treeSort?: TreeSort
+  setTreeSort?: (s: TreeSort) => void
 }
 
 export interface Command {
@@ -117,6 +120,13 @@ export function buildCommands(ctx: Ctx): Command[] {
     },
     { id: 'vault-scan', title: 'Scan for plans', group: 'Vault', run: async (c) => { await api.scan(); await c.refresh() } },
     { id: 'vault-sync', title: 'Sync now', group: 'Vault', run: async (c) => { await api.gitSync(); await c.refresh() } },
+    ...TREE_SORTS.filter((s) => s !== ctx.treeSort).map((s): Command => ({
+      id: `tree-sort-${s}`,
+      title: `Sort tree: ${TREE_SORT_LABELS[s].toLowerCase()}`,
+      group: 'Vault',
+      when: (c) => !!c.setTreeSort,
+      run: (c) => c.setTreeSort?.(s),
+    })),
   ]
 
   return [...navigate, ...document, ...view, ...vault]

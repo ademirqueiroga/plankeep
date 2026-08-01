@@ -10,6 +10,8 @@ export interface DocMeta {
   imported?: string
   updated?: string
   agentNote?: string
+  /** Id of the doc this one derives from (e.g. the plan a findings file came out of). */
+  derivedFrom?: string
 }
 
 export interface ClaudeActivity {

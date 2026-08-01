@@ -193,6 +193,7 @@ input:focus, select:focus, textarea:focus {
 .section-header:not(.static):hover { background: var(--hov); color: var(--fg); }
 .section-header.active { color: var(--brand); }
 .section-header.static { cursor: default; justify-content: space-between; }
+.section-header-actions { display: flex; align-items: center; gap: 2px; }
 .section-count { color: var(--faint); font-weight: 500; }
 
 .queue-section { flex-shrink: 0; }

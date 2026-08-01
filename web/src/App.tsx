@@ -13,6 +13,7 @@ import { Tooltip } from './components/Tooltip'
 import { Palette } from './components/Palette'
 import { buildCommands, matchesShortcut, type DocApi } from './shortcuts'
 import { hashToView, viewToHash } from './routing'
+import { loadTreeSort, TREE_SORT_KEY, type TreeSort } from './treeOrder'
 
 export type View =
   | { kind: 'doc'; path: string }
@@ -48,6 +49,8 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem('pk-sidebar-width')) || 280)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('pk-sidebar-collapsed') === '1')
   const [panelCollapsed, setPanelCollapsed] = useState(() => localStorage.getItem('pk-doc-panel-collapsed') === '1')
+  // tree sort is global (not per vault) — it's a reading preference, not vault structure
+  const [treeSort, setTreeSort] = useState<TreeSort>(loadTreeSort)
   const resizing = useRef(false)
   const docApiRef = useRef<DocApi | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -57,6 +60,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('pk-sidebar-collapsed', sidebarCollapsed ? '1' : '0')
   }, [sidebarCollapsed])
+
+  useEffect(() => {
+    localStorage.setItem(TREE_SORT_KEY, treeSort)
+  }, [treeSort])
 
   // URL hash mirrors the current view: refresh-proof, back/forward, shareable deep links.
   useEffect(() => {
@@ -126,7 +133,7 @@ export default function App() {
       const target = e.target as HTMLElement
       const isTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable
       if (isTyping) return
-      const ctx = { view, setView, openDoc, refresh, docApi: docApiRef.current ?? undefined, toggleSidebar, vaults, activeVault, switchVault }
+      const ctx = { view, setView, openDoc, refresh, docApi: docApiRef.current ?? undefined, toggleSidebar, vaults, activeVault, switchVault, treeSort, setTreeSort }
       for (const cmd of buildCommands(ctx)) {
         if (!cmd.keys || !matchesShortcut(cmd.keys, e)) continue
         if (cmd.when && !cmd.when(ctx)) continue
@@ -137,7 +144,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [view, refresh, openDoc, paletteOpen, toggleSidebar, vaults, activeVault, switchVault])
+  }, [view, refresh, openDoc, paletteOpen, toggleSidebar, vaults, activeVault, switchVault, treeSort])
 
   // sidebar resize by dragging the right edge
   useEffect(() => {
@@ -189,6 +196,8 @@ export default function App() {
             activeVault={activeVault}
             config={config}
             width={sidebarWidth}
+            treeSort={treeSort}
+            setTreeSort={setTreeSort}
             setView={setView}
             openDoc={openDoc}
             refresh={refresh}
@@ -269,6 +278,8 @@ export default function App() {
         vaults={vaults}
         activeVault={activeVault}
         switchVault={switchVault}
+        treeSort={treeSort}
+        setTreeSort={setTreeSort}
       />
       <DialogHost />
     </div>

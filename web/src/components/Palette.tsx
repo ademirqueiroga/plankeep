@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, type SearchHit, type VaultEntry } from '../api'
 import type { View } from '../App'
 import { buildCommands, type DocApi } from '../shortcuts'
+import type { TreeSort } from '../treeOrder'
 
 function fuzzyMatch(query: string, text: string): boolean {
   if (!query) return true
@@ -26,9 +27,11 @@ interface PaletteProps {
   vaults: VaultEntry[]
   activeVault: string
   switchVault: (name: string) => Promise<void>
+  treeSort: TreeSort
+  setTreeSort: (s: TreeSort) => void
 }
 
-export function Palette({ open, onClose, view, setView, openDoc, refresh, docApi, toggleSidebar, vaults, activeVault, switchVault }: PaletteProps) {
+export function Palette({ open, onClose, view, setView, openDoc, refresh, docApi, toggleSidebar, vaults, activeVault, switchVault, treeSort, setTreeSort }: PaletteProps) {
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<SearchHit[]>([])
   const [highlight, setHighlight] = useState(0)
@@ -45,8 +48,8 @@ export function Palette({ open, onClose, view, setView, openDoc, refresh, docApi
   }, [open])
 
   const ctx = useMemo(
-    () => ({ view, setView, openDoc, refresh, docApi: docApi ?? undefined, toggleSidebar, vaults, activeVault, switchVault }),
-    [view, setView, openDoc, refresh, docApi, toggleSidebar, vaults, activeVault, switchVault],
+    () => ({ view, setView, openDoc, refresh, docApi: docApi ?? undefined, toggleSidebar, vaults, activeVault, switchVault, treeSort, setTreeSort }),
+    [view, setView, openDoc, refresh, docApi, toggleSidebar, vaults, activeVault, switchVault, treeSort, setTreeSort],
   )
 
   const commands = useMemo(
