@@ -17,7 +17,12 @@ export interface DocMeta {
   imported?: string
   updated?: string
   agentNote?: string
+  /** Id (not path — ids survive moves) of the doc this one derives from, e.g. the plan a findings file came out of. */
+  derivedFrom?: string
 }
+
+/** Fields a meta patch may set. `derivedFrom: null` clears the link. */
+export type MetaPatch = Partial<Pick<DocMeta, 'type' | 'status' | 'tags' | 'agentNote'>> & { derivedFrom?: string | null }
 
 export interface DocSummary {
   path: string
@@ -75,6 +80,7 @@ function normalizeMeta(raw: unknown): DocMeta {
     imported: m.imported,
     updated: m.updated,
     agentNote: m.agentNote,
+    derivedFrom: m.derivedFrom ?? undefined,
   }
 }
 
@@ -141,14 +147,46 @@ export function autoStatusFor(rel: string, root: string = vaultRoot()): DocStatu
   return null
 }
 
-export function updateMeta(rel: string, patch: Partial<Pick<DocMeta, 'type' | 'status' | 'tags' | 'agentNote'>>, root: string = vaultRoot()): DocMeta {
+export function updateMeta(rel: string, patch: MetaPatch, root: string = vaultRoot()): DocMeta {
   const doc = readDoc(rel, root)
   const parsed = matter(doc.content)
   const extra = { ...parsed.data }
   delete extra.plankeep
-  const meta = { ...doc.meta, ...patch }
+  const meta = { ...doc.meta, ...patch } as DocMeta
+  // an explicit null/'' clears the link rather than writing a dead field; a doc can never derive from itself
+  if ('derivedFrom' in patch && (!patch.derivedFrom || patch.derivedFrom === meta.id)) delete meta.derivedFrom
   writeDoc(rel, parsed.content, meta, extra, root)
   return meta
+}
+
+/**
+ * Resolve a derivedFrom argument to a document id. Callers may pass either a vault-relative
+ * path (convenient for agents, which think in paths) or a raw id; anything that isn't a file
+ * in the vault is taken to be an id verbatim.
+ */
+export function resolveDocId(ref: string, root: string = vaultRoot()): string {
+  try {
+    const abs = safePath(ref, root)
+    if (fs.existsSync(abs) && fs.statSync(abs).isFile()) return readDoc(ref, root).meta.id
+  } catch {
+    // not a usable path — fall through and treat it as an id
+  }
+  return ref
+}
+
+/** True when pointing `childId` at `parentId` would create a derivedFrom loop (self-reference included). */
+export function createsCycle(childId: string, parentId: string, docs: DocSummary[]): boolean {
+  if (childId === parentId) return true
+  const byId = new Map(docs.map((d) => [d.meta.id, d]))
+  const seen = new Set<string>()
+  let cur = byId.get(parentId)
+  while (cur) {
+    if (cur.meta.id === childId) return true
+    if (seen.has(cur.meta.id)) return false
+    seen.add(cur.meta.id)
+    cur = cur.meta.derivedFrom ? byId.get(cur.meta.derivedFrom) : undefined
+  }
+  return false
 }
 
 export function summarize(rel: string, activityMap?: Record<string, ActivityRecord>, root: string = vaultRoot()): DocSummary {

@@ -118,12 +118,18 @@ export function buildApp(): Hono {
     const doc = vault.readDoc(rel)
     const abs = vault.safePath(rel)
     const record = activity.lastClaudeWrite(abs)
+    // both directions of the derived-from link, resolved by id so moves and renames don't break them
+    const all = vault.listDocs()
+    const parent = doc.meta.derivedFrom ? all.find((d) => d.meta.id === doc.meta.derivedFrom) : undefined
+    const derived = all.filter((d) => d.meta.derivedFrom === doc.meta.id).map((d) => ({ path: d.path, title: d.title }))
     return c.json({
       path: rel,
       absPath: abs,
       ...doc,
       mtime: fs.statSync(abs).mtimeMs,
       claudeActivity: record ? { at: record.at, sessionId: record.sessionId, cwd: record.cwd } : undefined,
+      parent: parent ? { path: parent.path, title: parent.title } : undefined,
+      derived,
     })
   })
   api.put('/doc', async (c) => {
@@ -137,6 +143,13 @@ export function buildApp(): Hono {
   })
   api.post('/doc/meta', async (c) => {
     const { path: rel, ...patch } = await c.req.json()
+    if (patch.derivedFrom) {
+      patch.derivedFrom = vault.resolveDocId(patch.derivedFrom)
+      const self = vault.readDoc(rel).meta.id
+      if (vault.createsCycle(self, patch.derivedFrom, vault.listDocs())) {
+        return c.json({ error: 'That link would create a cycle — a document cannot derive from its own descendant.' }, 400)
+      }
+    }
     const meta = vault.updateMeta(rel, patch)
     // archiving takes the doc out of circulation — Up Next should never hold one
     if (patch.status === 'archived') queue.removeFromQueue(rel)

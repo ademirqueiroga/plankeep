@@ -256,6 +256,7 @@ export default function App() {
               refresh={refresh}
               onDeleted={() => setView({ kind: 'queue' })}
               onMoved={openDoc}
+              openDoc={openDoc}
               onDocApi={(api) => { docApiRef.current = api }}
               onOpenActivity={() => setView({ kind: 'activity' })}
               onPanelCollapsedChange={setPanelCollapsed}

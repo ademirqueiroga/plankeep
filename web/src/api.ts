@@ -37,6 +37,11 @@ export interface TreeNode {
   doc?: DocSummary
 }
 
+export interface DocLink {
+  path: string
+  title: string
+}
+
 export interface FullDoc {
   path: string
   absPath: string
@@ -46,6 +51,10 @@ export interface FullDoc {
   title: string
   mtime: number
   claudeActivity?: ClaudeActivity
+  /** The doc this one derives from — omitted when unset or dangling (parent deleted). */
+  parent?: DocLink
+  /** Docs that derive from this one. */
+  derived: DocLink[]
 }
 
 export interface InboxItem {
@@ -171,7 +180,9 @@ export const api = {
   doc: (path: string) => request<FullDoc>(`/api/doc?path=${encodeURIComponent(path)}`),
   saveDoc: (path: string, content: string) => put<DocSummary>('/api/doc', { path, content }),
   saveBody: (path: string, body: string) => put<DocSummary>('/api/doc', { path, body }),
-  setMeta: (path: string, patch: Partial<DocMeta>) => post<DocMeta>('/api/doc/meta', { path, ...patch }),
+  // derivedFrom accepts null to clear the link
+  setMeta: (path: string, patch: Partial<DocMeta> & { derivedFrom?: string | null }) =>
+    post<DocMeta>('/api/doc/meta', { path, ...patch }),
   move: (from: string, to: string, leaveLink?: boolean) => post('/api/docs/move', { from, to, leaveLink }),
   deleteDoc: (path: string) => post('/api/docs/delete', { path }),
   createFolder: (path: string) => post('/api/folders', { path }),

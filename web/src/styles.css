@@ -546,6 +546,15 @@ input:focus, select:focus, textarea:focus {
 }
 .menu-item.picker-highlight { background: var(--hov); }
 .picker-check { color: var(--brand); font-size: 11px; }
+.picker-searchable { min-width: 300px; }
+.picker-search { width: 100%; font-size: 12.5px; padding: 5px 8px; margin-bottom: 4px; }
+.picker-options { max-height: 320px; overflow-y: auto; }
+.picker-searchable .menu-item span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.picker-empty { padding: 8px 9px; font-size: 12px; color: var(--faint); }
 .prop-value-btn {
   flex: 1;
   min-width: 0;
@@ -555,6 +564,8 @@ input:focus, select:focus, textarea:focus {
   text-transform: capitalize;
 }
 .prop-value-btn.status-pill { display: inline-block; text-align: center; }
+/* doc titles are prose — don't title-case them like the type/status enums */
+.prop-value-btn.title-value { text-transform: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ============ context menu ============ */
 .context-menu {
@@ -716,8 +727,19 @@ input:focus, select:focus, textarea:focus {
   line-height: 1.25;
   margin: 0 0 8px;
 }
-.doc-subtitle { display: flex; align-items: center; gap: 10px; }
+.doc-subtitle { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .type-label { font-size: 12px; color: var(--faint); }
+.derived-from-label { font-size: 12px; color: var(--faint); }
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  color: var(--mut);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.link-btn:hover { background: none; color: var(--brand); }
 .status-pill {
   font-size: 11px;
   font-weight: 600;
@@ -815,7 +837,7 @@ input:focus, select:focus, textarea:focus {
 .panel-btn.danger:hover { background: var(--danger-bg); }
 
 .prop-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
-.prop-row label { width: 46px; font-size: 12px; color: var(--faint); flex-shrink: 0; }
+.prop-row label { width: 68px; font-size: 12px; color: var(--faint); flex-shrink: 0; }
 .prop-row select, .prop-row input { flex: 1; min-width: 0; font-size: 12.5px; padding: 4px 7px; }
 
 .path-row {

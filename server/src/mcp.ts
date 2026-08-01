@@ -14,6 +14,19 @@ const text = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON
 
 const VAULT_PARAM_DESC = 'Name of a registered vault to use instead of the active one (see the user\'s vault registry). Omit to use whichever vault is active in the UI.'
 
+const DERIVED_FROM_DESC =
+  'Vault-relative path OR document id of the doc this one derives from (e.g. the plan this findings file came out of). Creates the parent–child link shown in the vault tree.'
+
+/** Resolve a derivedFrom argument to an id, refusing links that would loop back on the doc itself. */
+function resolveParentId(ref: string, rel: string, root: string | undefined): string {
+  const parentId = vault.resolveDocId(ref, root)
+  const self = vault.readDoc(rel, root).meta.id
+  if (vault.createsCycle(self, parentId, vault.listDocs(root))) {
+    throw new Error(`derivedFrom "${ref}" would create a cycle — a document cannot derive from itself or its own descendant.`)
+  }
+  return parentId
+}
+
 export async function runMcp(): Promise<void> {
   await gitops.ensureVaultRepo()
   const server = new McpServer({ name: 'plankeep', version: '0.1.0' })
@@ -48,9 +61,10 @@ export async function runMcp(): Promise<void> {
       folder: z.string().optional().describe('Vault folder, usually the related project name, e.g. "my-app"'),
       type: z.enum(['plan', 'findings', 'exploration', 'research', 'note']).optional(),
       overwritePath: z.string().optional().describe('If updating an existing doc, its current vault-relative path'),
+      derivedFrom: z.string().optional().describe(DERIVED_FROM_DESC),
       vault: z.string().optional().describe(VAULT_PARAM_DESC),
     },
-    async ({ name, content, folder, type, overwritePath, vault: vaultName }) => {
+    async ({ name, content, folder, type, overwritePath, derivedFrom, vault: vaultName }) => {
       const root = vaultName ? vaultRootByName(vaultName) : undefined
       let rel: string
       if (overwritePath) {
@@ -60,6 +74,7 @@ export async function runMcp(): Promise<void> {
       } else {
         rel = vault.importContent(name, content, { folder, type, project: folder }, root)
       }
+      if (derivedFrom) vault.updateMeta(rel, { derivedFrom: resolveParentId(derivedFrom, rel, root) }, root)
       const autoStatus = vault.autoStatusFor(rel, root)
       if (autoStatus) vault.updateMeta(rel, { status: autoStatus }, root)
       await gitops.commitAll(`mcp save: ${rel}${autoStatus ? ` (auto-status: ${autoStatus})` : ''}`)
@@ -94,14 +109,16 @@ export async function runMcp(): Promise<void> {
 
   server.tool(
     'set_metadata',
-    'Update a document\'s type, status (draft|active|waiting|done|archived) or tags.',
+    'Update a document\'s type, status (draft|active|waiting|done|archived), tags or derived-from link.',
     {
       path: z.string(),
       type: z.enum(['plan', 'findings', 'exploration', 'research', 'note']).optional(),
       status: z.enum(['draft', 'active', 'waiting', 'done', 'archived']).optional(),
       tags: z.array(z.string()).optional(),
+      derivedFrom: z.string().optional().describe(`${DERIVED_FROM_DESC} Pass an empty string to clear it.`),
     },
     async ({ path: rel, ...patch }) => {
+      if (patch.derivedFrom) patch.derivedFrom = resolveParentId(patch.derivedFrom, rel, undefined)
       const meta = vault.updateMeta(rel, patch)
       // archiving takes the doc out of circulation — Up Next should never hold one
       if (patch.status === 'archived') queue.removeFromQueue(rel)

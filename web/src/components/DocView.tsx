@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { api, type AiJob, type ClaudeActivity, type Config, type DocMeta, type FullDoc } from '../api'
+import { api, type AiJob, type ClaudeActivity, type Config, type DocMeta, type DocSummary, type FullDoc } from '../api'
 import { CopyBtn } from './CopyBtn'
 import { dialog } from './Dialog'
 import { Tooltip } from './Tooltip'
@@ -11,6 +11,7 @@ import { ACTION_LABELS, ago } from './ActivityView'
 import { OutlineNav, type OutlineItem } from './OutlineNav'
 import type { DocApi } from '../shortcuts'
 import { activityWarning } from '../moveGuard'
+import { createsCycle } from '../treeOrder'
 
 const TYPES = ['plan', 'findings', 'exploration', 'research', 'note'] as const
 const STATUSES = ['draft', 'active', 'waiting', 'done', 'archived'] as const
@@ -45,12 +46,13 @@ interface DocViewProps {
   refresh: () => Promise<void>
   onDeleted: () => void
   onMoved: (newPath: string) => void
+  openDoc: (path: string) => void
   onDocApi?: (api: DocApi | null) => void
   onOpenActivity: () => void
   onPanelCollapsedChange?: (collapsed: boolean) => void
 }
 
-export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, onOpenActivity, onPanelCollapsedChange }: DocViewProps) {
+export function DocView({ path, config, refresh, onDeleted, onMoved, openDoc, onDocApi, onOpenActivity, onPanelCollapsedChange }: DocViewProps) {
   const [doc, setDoc] = useState<FullDoc | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
@@ -59,13 +61,15 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
   const [aiMessage, setAiMessage] = useState<string | null>(null)
   const [lastRun, setLastRun] = useState<AiJob | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
-  const [pickerOpen, setPickerOpen] = useState<'status' | 'type' | null>(null)
+  const [pickerOpen, setPickerOpen] = useState<'status' | 'type' | 'parent' | null>(null)
+  const [allDocs, setAllDocs] = useState<DocSummary[]>([])
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const savingRef = useRef(false)
   const pendingReloadOnExitRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const statusBtnRef = useRef<HTMLButtonElement>(null)
   const typeBtnRef = useRef<HTMLButtonElement>(null)
+  const parentBtnRef = useRef<HTMLButtonElement>(null)
   const tagsInputRef = useRef<HTMLInputElement>(null)
   const articleRef = useRef<HTMLElement>(null)
   const [outline, setOutline] = useState<OutlineItem[]>([])
@@ -256,6 +260,21 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
     }, 3000)
   }
 
+  const openParentPicker = async () => {
+    setAllDocs(await api.docs())
+    setPickerOpen('parent')
+  }
+
+  const chooseParent = async (value: string) => {
+    if (!doc) return
+    if (!value) return setMeta({ derivedFrom: null })
+    if (createsCycle(doc.meta.id, value, allDocs)) {
+      setStatusMessage('That would create a cycle — a document cannot derive from itself or one of its own derived documents.')
+      return
+    }
+    await setMeta({ derivedFrom: value })
+  }
+
   const archive = async () => {
     await setMeta({ status: 'archived' })
     setStatusMessage('Archived — hidden from the vault tree and removed from Up Next.')
@@ -427,6 +446,14 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
               edited {ago(new Date(doc.mtime).toISOString())}
             </span>
             {doc.claudeActivity && <ClaudeActivityBadge activity={doc.claudeActivity} />}
+            {doc.parent && (
+              <span className="derived-from-label">
+                ↳ derived from{' '}
+                <button className="link-btn" onClick={() => openDoc(doc.parent!.path)}>
+                  {doc.parent.title}
+                </button>
+              </span>
+            )}
           </div>
           {doc.meta.agentNote && (
             <div className={`agent-note${doc.meta.status === 'waiting' ? ' waiting' : ''}`}>⏸ {doc.meta.agentNote}</div>
@@ -501,6 +528,12 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
             <label>Labels</label>
             <LabelsEditor value={doc.meta.tags} onChange={(tags) => setMeta({ tags })} inputRef={tagsInputRef} />
           </div>
+          <div className="prop-row">
+            <label>Derived from</label>
+            <button ref={parentBtnRef} className="prop-value-btn title-value" title={doc.parent?.path} onClick={openParentPicker}>
+              {doc.parent?.title ?? '—'}
+            </button>
+          </div>
         </PanelGroup>
 
         {pickerOpen === 'type' && (
@@ -520,6 +553,33 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, onDocApi, o
             onSelect={(v) => setMeta({ status: v })}
             onClose={() => setPickerOpen(null)}
           />
+        )}
+        {pickerOpen === 'parent' && (
+          <PickerMenu
+            anchorRef={parentBtnRef}
+            searchable
+            searchPlaceholder="Filter documents…"
+            options={[
+              { value: '', label: '— Clear' },
+              ...allDocs
+                .filter((d) => d.path !== path)
+                .sort((a, b) => a.title.localeCompare(b.title))
+                .map((d) => ({ value: d.meta.id, label: d.title })),
+            ]}
+            current={doc.meta.derivedFrom ?? ''}
+            onSelect={chooseParent}
+            onClose={() => setPickerOpen(null)}
+          />
+        )}
+
+        {doc.derived.length > 0 && (
+          <PanelGroup title="Derived documents">
+            {doc.derived.map((d) => (
+              <button key={d.path} className="panel-btn" title={d.path} onClick={() => openDoc(d.path)}>
+                {d.title}
+              </button>
+            ))}
+          </PanelGroup>
         )}
 
         <PanelGroup title="Actions">
