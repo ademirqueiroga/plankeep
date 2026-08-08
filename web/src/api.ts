@@ -166,6 +166,55 @@ export interface VaultsResponse {
   active: string
 }
 
+export const exportPdfUrl = (path: string): string => `/api/export/pdf?path=${encodeURIComponent(path)}`
+export const exportHtmlUrl = (path: string, print?: boolean): string =>
+  `/api/export/html?path=${encodeURIComponent(path)}${print ? '&print=1' : ''}`
+
+function filenameFrom(disposition: string | null): string | null {
+  if (!disposition) return null
+  const utf8 = disposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8) return decodeURIComponent(utf8[1])
+  return disposition.match(/filename="([^"]+)"/i)?.[1] ?? null
+}
+
+export interface ExportResult {
+  ok: boolean
+  /** True when the server had no browser to print with and we opened the print-dialog fallback instead. */
+  fallback?: boolean
+  error?: string
+}
+
+/** Download a doc as PDF. With no server-side browser, opens the same document in a tab for the print dialog. */
+export async function downloadPdf(path: string): Promise<ExportResult> {
+  let res: Response
+  try {
+    res = await fetch(exportPdfUrl(path))
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+  if (!res.ok) {
+    const error = await res
+      .json()
+      .then((d) => d.error as string)
+      .catch(() => res.statusText)
+    // 501 = no Chromium install on this machine; the user's own browser can still print the page
+    if (res.status === 501) {
+      window.open(exportHtmlUrl(path, true), '_blank')
+      return { ok: false, fallback: true, error }
+    }
+    return { ok: false, error }
+  }
+  const url = URL.createObjectURL(await res.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filenameFrom(res.headers.get('Content-Disposition')) ?? 'document.pdf'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  return { ok: true }
+}
+
 export const api = {
   meta: () => request<{ vaultPath: string; vaults: VaultEntry[]; activeVault: string; config: Config; mcp: McpInfo }>('/api/meta'),
   vaults: () => request<VaultsResponse>('/api/vaults'),

@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, type ClaudeActivity, type Config, type DocSummary, type GitState, type TreeNode, type VaultEntry } from '../api'
+import { api, downloadPdf, type ClaudeActivity, type Config, type DocSummary, type GitState, type TreeNode, type VaultEntry } from '../api'
 import type { View } from '../App'
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu'
 import { dialog } from './Dialog'
@@ -304,6 +304,18 @@ export function Sidebar(props: SidebarProps) {
     }
   }
 
+  const exportPdfs = async (paths: string[]) => {
+    for (const [i, p] of paths.entries()) {
+      // browsers throttle back-to-back downloads — space them out
+      if (i > 0) await new Promise((r) => setTimeout(r, 300))
+      const res = await downloadPdf(p)
+      if (!res.ok) {
+        window.alert(res.fallback ? `${res.error} Opening the print dialog instead — choose "Save as PDF".` : res.error ?? 'Export failed.')
+        return
+      }
+    }
+  }
+
   const docMenu = (path: string): MenuItem[] => {
     const multi = selected.has(path) && selected.size > 1
     if (multi) {
@@ -316,6 +328,7 @@ export function Sidebar(props: SidebarProps) {
           await refresh()
         } },
         { label: `Copy ${paths.length} paths`, onClick: () => navigator.clipboard.writeText(paths.map(absOf).join('\n')) },
+        { label: `Export ${paths.length} as PDF`, onClick: () => exportPdfs(paths) },
         { label: 'Move to folder…', onClick: async () => {
           const folder = await dialog.prompt({ title: 'Move to folder', label: 'Destination folder (empty = vault root)' })
           if (folder !== null) await moveInternal(paths, folder.trim().replace(/^\/+|\/+$/g, ''))
@@ -351,6 +364,7 @@ export function Sidebar(props: SidebarProps) {
       { label: 'Copy path', hint: 'vault', onClick: () => navigator.clipboard.writeText(path) },
       { label: 'Copy absolute path', onClick: () => navigator.clipboard.writeText(absOf(path)) },
       { label: 'Reveal in Finder', onClick: () => api.reveal({ path }) },
+      { label: 'Export as PDF', onClick: () => exportPdfs([path]) },
       { separator: true },
       { label: 'Delete…', danger: true, onClick: () => deleteSingleDoc(path) },
     ]

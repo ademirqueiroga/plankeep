@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { api, type AiJob, type ClaudeActivity, type Config, type DocMeta, type DocSummary, type FullDoc } from '../api'
+import { api, downloadPdf, type AiJob, type ClaudeActivity, type Config, type DocMeta, type DocSummary, type FullDoc } from '../api'
 import { CopyBtn } from './CopyBtn'
 import { dialog } from './Dialog'
 import { Tooltip } from './Tooltip'
@@ -61,6 +61,7 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, openDoc, on
   const [aiMessage, setAiMessage] = useState<string | null>(null)
   const [lastRun, setLastRun] = useState<AiJob | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
   const [pickerOpen, setPickerOpen] = useState<'status' | 'type' | 'parent' | null>(null)
   const [allDocs, setAllDocs] = useState<DocSummary[]>([])
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -278,6 +279,15 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, openDoc, on
   const archive = async () => {
     await setMeta({ status: 'archived' })
     setStatusMessage('Archived — hidden from the vault tree and removed from Up Next.')
+  }
+
+  const exportPdf = async () => {
+    setExporting(true)
+    const res = await downloadPdf(path)
+    setExporting(false)
+    if (!res.ok) {
+      setStatusMessage(res.fallback ? `${res.error} Opening the print dialog instead — choose "Save as PDF".` : res.error ?? 'Export failed.')
+    }
   }
 
   const rename = async () => {
@@ -598,6 +608,11 @@ export function DocView({ path, config, refresh, onDeleted, onMoved, openDoc, on
           )}
           <button className="panel-btn" onClick={rename}>Move / rename…</button>
           <button className="panel-btn" onClick={() => api.reveal({ path })}>Reveal in Finder</button>
+          <Tooltip label="Print-styled PDF of this document">
+            <button className="panel-btn" disabled={exporting} onClick={exportPdf}>
+              {exporting ? 'Exporting…' : 'Export as PDF'}
+            </button>
+          </Tooltip>
         </PanelGroup>
 
         <PanelGroup title="AI">
