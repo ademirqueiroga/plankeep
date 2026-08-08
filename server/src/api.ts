@@ -13,7 +13,14 @@ import * as scanner from './scanner.js'
 import * as ai from './ai.js'
 import * as memories from './memories.js'
 import * as activity from './activity.js'
+import * as exporter from './exporter.js'
 import { onVaultActivated } from './startup.js'
+
+/** RFC 6266 filename: ASCII fallback plus a UTF-8 form, since header values can't carry em dashes & friends. */
+function contentDisposition(filename: string): string {
+  const ascii = filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '-')
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`
+}
 
 export function buildApp(): Hono {
   const app = new Hono()
@@ -231,6 +238,26 @@ export function buildApp(): Hono {
       return c.json(activityResponse(hit?.record ?? null, { path: hit ? path.relative(vault.vaultRoot(), hit.path) : undefined }))
     }
     return c.json(activityResponse(activity.lastClaudeWrite(vault.safePath(rel ?? ''))))
+  })
+
+  // ----- export (read-only: never touches the vault or its git history) -----
+  api.get('/export/html', (c) => {
+    const rel = c.req.query('path') ?? ''
+    const { html } = exporter.renderHtml(rel, { print: c.req.query('print') === '1' })
+    return c.html(html)
+  })
+  api.get('/export/pdf', async (c) => {
+    const rel = c.req.query('path') ?? ''
+    if (!exporter.findChrome()) return c.json({ error: exporter.NO_CHROME_MESSAGE }, 501)
+    const { pdfPath, filename } = await exporter.exportPdf(rel)
+    try {
+      return c.body(fs.readFileSync(pdfPath), 200, {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': contentDisposition(filename),
+      })
+    } finally {
+      fs.rmSync(pdfPath, { force: true })
+    }
   })
 
   // ----- desktop niceties (server runs on the user's machine) -----
