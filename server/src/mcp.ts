@@ -8,6 +8,7 @@ import * as inbox from './inbox.js'
 import * as scanner from './scanner.js'
 import * as ai from './ai.js'
 import * as activity from './activity.js'
+import * as exporter from './exporter.js'
 import { loadConfig, vaultRootByName } from './config.js'
 
 const text = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] })
@@ -172,6 +173,21 @@ export async function runMcp(): Promise<void> {
       queue.addToQueue(rel, position)
       await gitops.commitAll(`queue: add ${rel}`)
       return text(queue.queueDocs())
+    },
+  )
+
+  server.tool(
+    'export_pdf',
+    'Render a vault document to a print-styled PDF (serif headings, task-list checkboxes, page margins) and return the file path so it can be handed to the user. Requires a Chromium-family browser on the machine.',
+    {
+      path: z.string().describe('Vault-relative path of the document to export'),
+      outPath: z.string().optional().describe('Where to write the PDF (default: a temp file named after the doc title)'),
+      vault: z.string().optional().describe(VAULT_PARAM_DESC),
+    },
+    async ({ path: rel, outPath, vault: vaultName }) => {
+      const root = vaultName ? vaultRootByName(vaultName) : undefined
+      const { pdfPath, title } = await exporter.exportPdf(rel, outPath, root)
+      return text({ pdfPath, title })
     },
   )
 

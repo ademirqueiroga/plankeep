@@ -43,6 +43,24 @@ async function main(): Promise<void> {
       console.log(`Scan complete: ${result.added} new candidate(s) from ${result.examined} file(s) examined.`)
       break
     }
+    case 'export': {
+      const rel = process.argv[3]
+      if (!rel) {
+        console.error('Usage: plankeep export <vault-relative-path> [outPath]')
+        process.exit(1)
+      }
+      const { exportPdf, findChrome, safeFilename, NO_CHROME_MESSAGE } = await import('./exporter.js')
+      if (!findChrome()) {
+        console.error(NO_CHROME_MESSAGE)
+        process.exit(1)
+      }
+      const { readDoc } = await import('./vault.js')
+      const path = await import('node:path')
+      const outPath = process.argv[4] ?? path.join(process.cwd(), safeFilename(readDoc(rel).title, rel))
+      const result = await exportPdf(rel, outPath)
+      console.log(result.pdfPath)
+      break
+    }
     case 'mcp': {
       const { runMcp } = await import('./mcp.js')
       await runMcp()
@@ -55,7 +73,7 @@ async function main(): Promise<void> {
       break
     }
     default:
-      console.error(`Unknown command: ${command}. Usage: plankeep <serve|hook|scan|mcp|init>`)
+      console.error(`Unknown command: ${command}. Usage: plankeep <serve|hook|scan|export|mcp|init>`)
       process.exit(1)
   }
 }
