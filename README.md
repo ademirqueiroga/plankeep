@@ -8,11 +8,12 @@ Centralized, git-backed home for the markdown artifacts AI sessions produce — 
 - **Every mutation auto-commits** to the vault repo. Git history is the backup/undo mechanism; optionally push to a private GitHub remote.
 - The **inbox** collects candidate `.md` files found by a Claude Code hook (fires whenever Claude writes a markdown file anywhere) and by a scanner that sweeps your workspace for orphan plan files. You triage: import (copy or move) into a per-project folder, or dismiss.
 - **AI actions** (improve readability, add checkboxes, refresh-plan-vs-repo) shell out to `claude -p`, using your existing Claude Code auth — no API keys.
+- **Export as PDF** renders any doc to a print-styled PDF (serif headings, task-list checkboxes, page margins) from the doc panel, the tree context menu (single or multi-select), `cli.js export`, and the `export_pdf` MCP tool. It drives an installed Chromium-family browser headlessly — point `PLANKEEP_CHROME` at a binary to override the lookup. With no browser installed the app opens the same document in a tab and triggers the print dialog, so "Save as PDF" still works.
 - Machine-local state lives in `~/.plankeep/` (`config.json`, `inbox.json`) — never synced, so two machines can share one vault remote. Sync conflicts are resolved with normal git tooling, then re-synced; the app deliberately does no conflict resolution of its own.
 
 ## UI
 
-Left sidebar (resizable): Inbox, a scrollable **Up Next** preview, and the vault file tree — multi-select (⌘-click, ⇧-click), drag to move, drop `.md` files anywhere in the tree area to import, right-click for file actions (rename, copy path, reveal in Finder, safe delete). Footer shows live git sync state next to Settings. Top bar: breadcrumb + search (`⌘K`). Document view renders markdown with clickable checkboxes and a right-hand properties panel (type/status/tags, actions, AI, paths).
+Left sidebar (resizable): Inbox, a scrollable **Up Next** preview, and the vault file tree — multi-select (⌘-click, ⇧-click), drag to move, drop `.md` files anywhere in the tree area to import, right-click for file actions (rename, copy path, reveal in Finder, export as PDF, safe delete). Footer shows live git sync state next to Settings. Top bar: breadcrumb + search (`⌘K`). Document view renders markdown with clickable checkboxes and a right-hand properties panel (type/status/tags, actions, AI, paths).
 
 Dropped files are matched by name against the scan roots to recover their real path, so they're filed under their source project's folder and copy/move semantics work even though browsers hide file paths.
 
@@ -22,6 +23,7 @@ Dropped files are matched by name against the scan roots to recover their real p
 - **git**
 - Optional: **gh** (GitHub CLI, authenticated) — for the one-click "Create private GitHub repo" button
 - Optional: **claude** (Claude Code CLI) — for AI actions and the hook/MCP integrations
+- Optional: **Google Chrome** (or Chromium/Edge/Brave) — for PDF export; without one, export falls back to the browser's print dialog
 
 ## Install
 
@@ -46,6 +48,7 @@ First run creates the vault (`~/plans-vault`) as a git repo and `~/.plankeep/con
 node server/dist/cli.js serve   # UI + API
 node server/dist/cli.js scan    # sweep scan roots for orphan .md files -> inbox
 node server/dist/cli.js hook    # Claude Code PostToolUse handler (reads event JSON on stdin)
+node server/dist/cli.js export <vault-path> [out.pdf]   # render a doc to PDF (defaults to ./<title>.pdf)
 node server/dist/cli.js mcp     # MCP server over stdio
 node server/dist/cli.js init    # create/repair the vault
 ```
@@ -81,7 +84,7 @@ Every markdown file Claude writes lands in the inbox, except infra files (README
 claude mcp add --scope user plankeep -- /absolute/path/to/node /absolute/path/to/plankeep/server/dist/cli.js mcp
 ```
 
-Tools: `save_document` (LLMs should file plans here instead of repo roots), `list_documents`, `get_document`, `import_file`, `search_documents`, `set_metadata`, `report_plan_state`, `get_up_next_queue`, `add_to_up_next`, `list_inbox`, `list_vaults`. Tip: add a memory/CLAUDE.md note telling Claude to save plans via `save_document` with `folder` = project name.
+Tools: `save_document` (LLMs should file plans here instead of repo roots), `list_documents`, `get_document`, `import_file`, `search_documents`, `set_metadata`, `report_plan_state`, `get_up_next_queue`, `add_to_up_next`, `list_inbox`, `list_vaults`, `export_pdf`. Tip: add a memory/CLAUDE.md note telling Claude to save plans via `save_document` with `folder` = project name.
 
 ## Skill: plan execution
 
